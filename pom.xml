@@ -4,10 +4,10 @@
 
     <groupId>org.liquibase.ext</groupId>
     <artifactId>liquibase-athena</artifactId>
-    <version>0.4.1-SNAPSHOT</version>
+    <version>0.5.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <description>Liquibase extesion for AWS Athena.</description>
+    <description>Liquibase extension for AWS Athena.</description>
     <url>https://docs.liquibase.com</url>
 
     <licenses>
@@ -25,15 +25,11 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
 
         <organization>alvsanand</organization>
 
-        <liquibase.version>4.23.0</liquibase.version>
-
-        <athena-driver.version>3.2.0</athena-driver.version>
-        <athena-driver.url>https://downloads.athena.us-east-1.amazonaws.com/drivers/JDBC/${athena-driver.version}/athena-jdbc-${athena-driver.version}-with-dependencies.jar</athena-driver.url>
+        <liquibase.version>5.0.2</liquibase.version>
 
         <sonar.organization>${organization}</sonar.organization>
         <sonar.projectKey>${sonar.organization}_${project.artifactId}</sonar.projectKey>
@@ -59,13 +55,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Non-public Athena dependencies -->
-        <dependency>
-            <groupId>com.amazon.athena</groupId>
-            <artifactId>jdbc</artifactId>
-            <version>${athena-driver.version}</version>
-        </dependency>
-
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -76,44 +65,6 @@
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>com.googlecode.maven-download-plugin</groupId>
-                <artifactId>download-maven-plugin</artifactId>
-                <version>1.3.0</version>
-                <executions>
-                    <execution>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>wget</goal>
-                        </goals>
-                        <configuration>
-                            <url>${athena-driver.url}</url>
-                            <outputDirectory>${project.build.directory}</outputDirectory>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-install-plugin</artifactId>
-                <inherited>false</inherited>
-                <executions>
-                    <execution>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>install-file</goal>
-                        </goals>
-                        <configuration>
-                            <groupId>com.amazon.athena</groupId>
-                            <artifactId>jdbc</artifactId>
-                            <version>${athena-driver.version}</version>
-                            <packaging>jar</packaging>
-                            <file>${project.build.directory}/athena-jdbc-${athena-driver.version}-with-dependencies.jar</file>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
                 <version>3.3.1</version>
@@ -144,57 +95,9 @@
                 </configuration>
             </plugin>
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <version>3.4.0</version>
-            </plugin>
-
-            <plugin>
                 <groupId>org.sonarsource.scanner.maven</groupId>
                 <artifactId>sonar-maven-plugin</artifactId>
                 <version>3.9.1.2184</version>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.2.0</version>
-                <configuration>
-                    <artifactSet>
-                        <includes>
-                            <include>*:*</include>
-                        </includes>
-                    </artifactSet>
-                    <filters>
-                        <filter>
-                            <artifact>*:*</artifact>
-                            <excludes>
-                                <exclude>log4j2*.properties</exclude>
-                                <exclude>log4j2*.xml</exclude>
-                                <exclude>META-INF/*.SF</exclude>
-                                <exclude>META-INF/*.DSA</exclude>
-                                <exclude>META-INF/*.RSA</exclude>
-                            </excludes>
-                        </filter>
-                    </filters>
-                    <transformers>
-                        <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                        <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer" />
-                        <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
-                            <addHeader>false</addHeader>
-                        </transformer>
-                    </transformers>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
 
             <plugin>

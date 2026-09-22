@@ -2,15 +2,21 @@ package liquibase.ext.athena.snapshot;
 
 import liquibase.database.Database;
 import liquibase.exception.DatabaseException;
+import liquibase.ext.athena.database.AthenaDatabase;
 import liquibase.snapshot.DatabaseSnapshot;
 import liquibase.snapshot.InvalidExampleException;
 import liquibase.snapshot.SnapshotGenerator;
 import liquibase.structure.DatabaseObject;
 
+@SuppressWarnings({ "unchecked", "rawtypes" })
 public class AthenaForeignKeySnapshotGenerator extends liquibase.snapshot.jvm.ForeignKeySnapshotGenerator {
     @Override
     public int getPriority(Class<? extends DatabaseObject> objectType, Database database) {
-        return PRIORITY_DATABASE;
+        if (database instanceof AthenaDatabase) {
+            int priority = super.getPriority(objectType, database);
+            return priority == PRIORITY_NONE ? PRIORITY_NONE : priority + PRIORITY_DATABASE;
+        }
+        return PRIORITY_NONE;
     }
 
     @Override
