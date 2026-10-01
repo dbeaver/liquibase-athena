@@ -1,6 +1,7 @@
 package liquibase.ext.athena.database;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -211,10 +212,19 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
         CatalogAndSchema customizedSchema = schema.customize(this);
         String qualifiedViewName = escapeViewName(
                 customizedSchema.getCatalogName(), customizedSchema.getSchemaName(), viewName);
-        String definition = Scope.getCurrentScope().getSingleton(ExecutorService.class)
+        @SuppressWarnings("unchecked")
+        List<String> definitionLines = Scope.getCurrentScope().getSingleton(ExecutorService.class)
                 .getExecutor("jdbc", this)
-                .queryForObject(new RawParameterizedSqlStatement("SHOW CREATE VIEW " + qualifiedViewName), String.class);
-        return definition == null ? null : "FULL_DEFINITION: " + definition;
+                .queryForList(new RawParameterizedSqlStatement("SHOW CREATE VIEW " + qualifiedViewName), String.class);
+        return formatViewDefinition(definitionLines);
+    }
+
+    static String formatViewDefinition(List<String> definitionLines) {
+        if (definitionLines == null || definitionLines.isEmpty()) {
+            return null;
+        }
+        // Athena returns the CREATE VIEW statement one line per result row.
+        return "FULL_DEFINITION: " + String.join("\n", definitionLines);
     }
 
     /*********************************

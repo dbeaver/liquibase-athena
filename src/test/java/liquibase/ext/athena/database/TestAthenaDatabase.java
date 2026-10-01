@@ -1,6 +1,7 @@
 package liquibase.ext.athena.database;
 
 import java.lang.reflect.Proxy;
+import java.util.List;
 
 import liquibase.database.DatabaseConnection;
 import org.junit.Test;
@@ -22,6 +23,7 @@ import liquibase.structure.core.View;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class TestAthenaDatabase {
@@ -86,6 +88,17 @@ public class TestAthenaDatabase {
         assertTrue(views.getPriority(View.class, athena) > SnapshotGenerator.PRIORITY_NONE);
         assertEquals(SnapshotGenerator.PRIORITY_NONE, views.getPriority(View.class, h2));
         assertEquals(SnapshotGenerator.PRIORITY_NONE, views.getPriority(Table.class, athena));
+    }
+
+    @Test
+    public void assemblesMultiRowViewDefinitions() {
+        assertEquals("FULL_DEFINITION: CREATE VIEW analytics.report AS\nSELECT id\nFROM analytics.events",
+                AthenaDatabase.formatViewDefinition(List.of(
+                        "CREATE VIEW analytics.report AS", "SELECT id", "FROM analytics.events")));
+        assertEquals("FULL_DEFINITION: CREATE VIEW analytics.report AS SELECT id FROM analytics.events",
+                AthenaDatabase.formatViewDefinition(List.of(
+                        "CREATE VIEW analytics.report AS SELECT id FROM analytics.events")));
+        assertNull(AthenaDatabase.formatViewDefinition(List.of()));
     }
 
     private static DatabaseConnection connection(String url, String productName, String catalog) {
