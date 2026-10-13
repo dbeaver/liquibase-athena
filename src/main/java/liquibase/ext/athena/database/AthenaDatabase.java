@@ -4,6 +4,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import liquibase.CatalogAndSchema;
 import liquibase.Scope;
@@ -33,6 +35,9 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
     private static final Set<String> PRODUCT_NAMES = Set.of("aws.athena", "amazon athena", "athena");
     private static final String DEFAULT_JDBC_DRIVER = "com.amazon.athena.jdbc.AthenaDriver";
     private static final int DEFAULT_JDBC_PORT = 443;
+    private static final Pattern CREATE_VIEW_PREFIX = Pattern.compile(
+            "^\\s*CREATE\\s+(?:OR\\s+REPLACE\\s+)?VIEW\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\S+|\"[^\"]+\")(?:\\s*\\.\\s*(?:\\S+|\"[^\"]+\"))*\\s+AS\\s+",
+            Pattern.CASE_INSENSITIVE);
 
     private static final Set<String> RESERVED_WORDS = Set.of(
             "ALL", "ALTER", "AND", "ARRAY", "AS", "AUTHORIZATION", "BETWEEN", "BIGINT", "BINARY", "BOOLEAN",
@@ -224,7 +229,13 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
             return null;
         }
         // Athena returns the CREATE VIEW statement one line per result row.
-        return "FULL_DEFINITION: " + String.join("\n", definitionLines);
+        // Return only the query so Liquibase can create the view in the target schema.
+        String definition = String.join("\n", definitionLines);
+        Matcher createViewPrefix = CREATE_VIEW_PREFIX.matcher(definition);
+        if (createViewPrefix.find()) {
+            return definition.substring(createViewPrefix.end());
+        }
+        return definition;
     }
 
     /*********************************

@@ -56,7 +56,7 @@ public class TestAthenaViewDefinition {
 
         String definition = database.getViewDefinition(new CatalogAndSchema("AwsDataCatalog", "analytics"), "report");
 
-        assertEquals("FULL_DEFINITION: CREATE VIEW analytics.report AS\nSELECT id\nFROM analytics.events", definition);
+        assertEquals("SELECT id\nFROM analytics.events", definition);
         assertTrue(query.get().startsWith("SHOW CREATE VIEW "));
         assertTrue(query.get().contains("report"));
     }

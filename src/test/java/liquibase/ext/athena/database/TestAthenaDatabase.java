@@ -3,7 +3,11 @@ package liquibase.ext.athena.database;
 import java.lang.reflect.Proxy;
 import java.util.List;
 
+import liquibase.change.core.CreateViewChange;
 import liquibase.database.DatabaseConnection;
+import liquibase.sql.Sql;
+import liquibase.sqlgenerator.SqlGeneratorFactory;
+import liquibase.statement.SqlStatement;
 import org.junit.Test;
 
 import liquibase.database.DatabaseFactory;
@@ -91,14 +95,26 @@ public class TestAthenaDatabase {
     }
 
     @Test
-    public void assemblesMultiRowViewDefinitions() {
-        assertEquals("FULL_DEFINITION: CREATE VIEW analytics.report AS\nSELECT id\nFROM analytics.events",
-                AthenaDatabase.formatViewDefinition(List.of(
-                        "CREATE VIEW analytics.report AS", "SELECT id", "FROM analytics.events")));
-        assertEquals("FULL_DEFINITION: CREATE VIEW analytics.report AS SELECT id FROM analytics.events",
-                AthenaDatabase.formatViewDefinition(List.of(
-                        "CREATE VIEW analytics.report AS SELECT id FROM analytics.events")));
+    public void extractsQueryFromMultiRowViewDefinitions() {
+        assertEquals("SELECT id\nFROM analytics.events", AthenaDatabase.formatViewDefinition(List.of(
+                "CREATE VIEW analytics.report AS", "SELECT id", "FROM analytics.events")));
+        assertEquals("SELECT id FROM analytics.events", AthenaDatabase.formatViewDefinition(List.of(
+                "CREATE VIEW analytics.report AS SELECT id FROM analytics.events")));
         assertNull(AthenaDatabase.formatViewDefinition(List.of()));
+    }
+
+    @Test
+    public void generatesViewDdlForTargetSchema() {
+        CreateViewChange change = new CreateViewChange();
+        change.setSchemaName("target");
+        change.setViewName("report");
+        change.setSelectQuery(AthenaDatabase.formatViewDefinition(List.of(
+                "CREATE VIEW source.report AS", "SELECT id FROM source.events")));
+
+        SqlStatement statement = change.generateStatements(new AthenaDatabase())[0];
+        Sql[] sql = SqlGeneratorFactory.getInstance().generateSql(statement, new AthenaDatabase());
+
+        assertEquals("CREATE VIEW \"target\".report AS SELECT id FROM source.events", sql[0].toSql());
     }
 
     private static DatabaseConnection connection(String url, String productName, String catalog) {
