@@ -106,6 +106,14 @@ public class Application {
 }
 ```
 
+## Generated table DDL
+
+Generic Liquibase table changes generate Athena external-table DDL with backtick-quoted
+database and column names, without a catalog prefix or numeric display widths.
+The generic table model does not contain S3 locations, storage formats, or partition
+definitions. Add the required `LOCATION` and storage/partition clauses before executing
+generated table DDL. This path does not recreate Iceberg tables; use their native DDL.
+
 ## Issue Tracking
 
 Any issues can be logged in the [Github issue tracker](https://github.com/alvsanand/liquibase-athena/issues).
