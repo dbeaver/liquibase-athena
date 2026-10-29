@@ -14,6 +14,7 @@ import liquibase.database.DatabaseFactory;
 import liquibase.database.core.H2Database;
 import liquibase.ext.athena.snapshot.AthenaForeignKeySnapshotGenerator;
 import liquibase.ext.athena.snapshot.AthenaSchemaSnapshotGenerator;
+import liquibase.ext.athena.snapshot.AthenaTableSnapshotGenerator;
 import liquibase.ext.athena.snapshot.AthenaViewSnapshotGenerator;
 import liquibase.snapshot.SnapshotGenerator;
 import liquibase.structure.core.ForeignKey;
@@ -82,6 +83,7 @@ public class TestAthenaDatabase {
         AthenaForeignKeySnapshotGenerator foreignKeys = new AthenaForeignKeySnapshotGenerator();
         AthenaSchemaSnapshotGenerator schemas = new AthenaSchemaSnapshotGenerator();
         AthenaViewSnapshotGenerator views = new AthenaViewSnapshotGenerator();
+        AthenaTableSnapshotGenerator tables = new AthenaTableSnapshotGenerator();
 
         assertTrue(foreignKeys.getPriority(ForeignKey.class, athena) > SnapshotGenerator.PRIORITY_NONE);
         assertEquals(SnapshotGenerator.PRIORITY_NONE, foreignKeys.getPriority(ForeignKey.class, h2));
@@ -92,6 +94,9 @@ public class TestAthenaDatabase {
         assertTrue(views.getPriority(View.class, athena) > SnapshotGenerator.PRIORITY_NONE);
         assertEquals(SnapshotGenerator.PRIORITY_NONE, views.getPriority(View.class, h2));
         assertEquals(SnapshotGenerator.PRIORITY_NONE, views.getPriority(Table.class, athena));
+        assertTrue(tables.getPriority(Table.class, athena) > SnapshotGenerator.PRIORITY_NONE);
+        assertEquals(SnapshotGenerator.PRIORITY_NONE, tables.getPriority(Table.class, h2));
+        assertEquals(SnapshotGenerator.PRIORITY_NONE, tables.getPriority(View.class, athena));
     }
 
     @Test

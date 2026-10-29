@@ -18,6 +18,7 @@ import liquibase.executor.ExecutorService;
 import liquibase.ext.athena.configuration.AthenaConfiguration;
 import liquibase.statement.core.RawParameterizedSqlStatement;
 import liquibase.structure.DatabaseObject;
+import liquibase.structure.core.Catalog;
 import liquibase.structure.core.ForeignKey;
 import liquibase.structure.core.Index;
 import liquibase.structure.core.PrimaryKey;
@@ -103,7 +104,18 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
 
     @Override
     public CatalogAndSchema.CatalogAndSchemaCase getSchemaAndCatalogCase() {
-        return CatalogAndSchema.CatalogAndSchemaCase.ORIGINAL_CASE;
+        // JDBC and information_schema can report AwsDataCatalog with different casing.
+        // ORIGINAL_CASE makes Liquibase cache these as different catalogs and lose rows.
+        return CatalogAndSchema.CatalogAndSchemaCase.LOWER_CASE;
+    }
+
+    @Override
+    public String correctObjectName(String objectName, final Class<? extends DatabaseObject> objectType) {
+        if (Catalog.class.equals(objectType)) {
+            // Keep the catalog's canonical spelling for Athena metadata API requests.
+            return objectName;
+        }
+        return super.correctObjectName(objectName, objectType);
     }
 
     @Override
@@ -112,7 +124,8 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
             // Athena recommend object names in lowercase. Athena will lowercase the name
             // for you to run the query.
             objectName = objectName.trim().toLowerCase();
-            if (mustQuoteObjectName(objectName, objectType)) {
+            // Preserve existing catalog/schema DDL quoting independently of cache normalization.
+            if (isCatalogOrSchemaType(objectType) || mustQuoteObjectName(objectName, objectType)) {
                 return quoteObject(objectName, objectType);
             } else if (quotingStrategy == ObjectQuotingStrategy.QUOTE_ALL_OBJECTS) {
                 return quoteObject(objectName, objectType);
@@ -222,6 +235,36 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
                 .getExecutor("jdbc", this)
                 .queryForList(new RawParameterizedSqlStatement("SHOW CREATE VIEW " + qualifiedViewName), String.class);
         return formatViewDefinition(definitionLines);
+    }
+
+    public String getTableDefinition(CatalogAndSchema schema, String tableName) throws DatabaseException {
+        CatalogAndSchema customizedSchema = schema.customize(this);
+        String qualifiedTableName = escapeTableNameForDdl(customizedSchema.getSchemaName(), tableName);
+        @SuppressWarnings("unchecked")
+        List<String> definitionLines = Scope.getCurrentScope().getSingleton(ExecutorService.class)
+                .getExecutor("jdbc", this)
+                .queryForList(new RawParameterizedSqlStatement("SHOW CREATE TABLE " + qualifiedTableName), String.class);
+        if (definitionLines == null || definitionLines.isEmpty()) {
+            throw new DatabaseException("No Athena table definition returned for " + qualifiedTableName);
+        }
+        String definition = String.join("\n", definitionLines);
+        if (definition.isBlank()) {
+            throw new DatabaseException("Empty Athena table definition returned for " + qualifiedTableName);
+        }
+        return definition;
+    }
+
+    /** Hive table DDL accepts database.table, without a catalog prefix. */
+    public String escapeTableNameForDdl(String schemaName, String tableName) {
+        if (schemaName == null) {
+            schemaName = getDefaultSchemaName();
+        }
+        return (schemaName == null || schemaName.isBlank() ? "" : quoteDdlIdentifier(schemaName) + ".")
+                + quoteDdlIdentifier(tableName);
+    }
+
+    private static String quoteDdlIdentifier(String name) {
+        return "`" + name.trim().toLowerCase(Locale.ROOT).replace("`", "``") + "`";
     }
 
     static String formatViewDefinition(List<String> definitionLines) {

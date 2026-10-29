@@ -65,13 +65,8 @@ public class AthenaCreateTableGenerator extends CreateTableGenerator {
     @Override
     @SuppressWarnings("rawtypes")
     public Sql[] generateSql(CreateTableStatement statement, Database database, SqlGeneratorChain chain) {
-        String schema = statement.getSchemaName();
-        if (schema == null) {
-            schema = database.getDefaultSchemaName();
-        }
-        // Athena table DDL accepts database.table, not catalog.database.table.
-        String tableName = (schema == null || schema.isBlank() ? "" : quoteIdentifier(schema) + ".")
-                + quoteIdentifier(statement.getTableName());
+        String tableName = ((AthenaDatabase) database).escapeTableNameForDdl(
+                statement.getSchemaName(), statement.getTableName());
         StringJoiner columns = new StringJoiner(", ");
         for (String column : statement.getColumns()) {
             String type = statement.getColumnTypes().get(column).toDatabaseDataType(database).toString();

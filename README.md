@@ -46,7 +46,7 @@ First, add Github repository authentication to your ```pom.xml``` or ```settings
 </settings>
 ```
 
-Specify the Liquibase extension in the `<dependency>` section of ```pom.xml``` by adding the `org.liquibase.ext` dependency for the Liquibase plugin.
+Specify the Liquibase extension in the `<dependency>` section of ```pom.xml``` by adding the `liquibase:athena` dependency for the Liquibase plugin.
 
 ```xml
 ...
@@ -73,8 +73,8 @@ Specify the Liquibase extension in the `<dependency>` section of ```pom.xml``` b
       </configuration>
       <dependencies>
          <dependency>
-            <groupId>org.liquibase.ext</groupId>
-            <artifactId>liquibase-athena</artifactId>
+            <groupId>liquibase</groupId>
+            <artifactId>athena</artifactId>
             <version>${liquibase-athena.version}</version>
          </dependency>
       </dependencies>
@@ -107,6 +107,13 @@ public class Application {
 ```
 
 ## Generated table DDL
+
+Schema comparison between Athena databases uses the source `SHOW CREATE TABLE`
+definition, preserving its S3 `LOCATION`, storage format, partition definitions,
+and table properties. Only the created table's name is remapped to the target
+database; the S3 location is kept unchanged. Reading the source definition requires
+the corresponding Athena/Data Catalog permissions. A read failure stops change
+generation rather than emitting an incomplete table definition.
 
 Generic Liquibase table changes generate Athena external-table DDL with backtick-quoted
 database and column names, without a catalog prefix or numeric display widths.
