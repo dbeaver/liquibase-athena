@@ -1,14 +1,20 @@
 package liquibase.ext.athena.database;
 
 import java.lang.reflect.Proxy;
+import java.util.List;
 
+import liquibase.change.core.CreateViewChange;
 import liquibase.database.DatabaseConnection;
+import liquibase.sql.Sql;
+import liquibase.sqlgenerator.SqlGeneratorFactory;
+import liquibase.statement.SqlStatement;
 import org.junit.Test;
 
 import liquibase.database.DatabaseFactory;
 import liquibase.database.core.H2Database;
 import liquibase.ext.athena.snapshot.AthenaForeignKeySnapshotGenerator;
 import liquibase.ext.athena.snapshot.AthenaSchemaSnapshotGenerator;
+import liquibase.ext.athena.snapshot.AthenaTableSnapshotGenerator;
 import liquibase.ext.athena.snapshot.AthenaViewSnapshotGenerator;
 import liquibase.snapshot.SnapshotGenerator;
 import liquibase.structure.core.ForeignKey;
@@ -22,6 +28,7 @@ import liquibase.structure.core.View;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class TestAthenaDatabase {
@@ -76,6 +83,7 @@ public class TestAthenaDatabase {
         AthenaForeignKeySnapshotGenerator foreignKeys = new AthenaForeignKeySnapshotGenerator();
         AthenaSchemaSnapshotGenerator schemas = new AthenaSchemaSnapshotGenerator();
         AthenaViewSnapshotGenerator views = new AthenaViewSnapshotGenerator();
+        AthenaTableSnapshotGenerator tables = new AthenaTableSnapshotGenerator();
 
         assertTrue(foreignKeys.getPriority(ForeignKey.class, athena) > SnapshotGenerator.PRIORITY_NONE);
         assertEquals(SnapshotGenerator.PRIORITY_NONE, foreignKeys.getPriority(ForeignKey.class, h2));
@@ -86,6 +94,32 @@ public class TestAthenaDatabase {
         assertTrue(views.getPriority(View.class, athena) > SnapshotGenerator.PRIORITY_NONE);
         assertEquals(SnapshotGenerator.PRIORITY_NONE, views.getPriority(View.class, h2));
         assertEquals(SnapshotGenerator.PRIORITY_NONE, views.getPriority(Table.class, athena));
+        assertTrue(tables.getPriority(Table.class, athena) > SnapshotGenerator.PRIORITY_NONE);
+        assertEquals(SnapshotGenerator.PRIORITY_NONE, tables.getPriority(Table.class, h2));
+        assertEquals(SnapshotGenerator.PRIORITY_NONE, tables.getPriority(View.class, athena));
+    }
+
+    @Test
+    public void extractsQueryFromMultiRowViewDefinitions() {
+        assertEquals("SELECT id\nFROM analytics.events", AthenaDatabase.formatViewDefinition(List.of(
+                "CREATE VIEW analytics.report AS", "SELECT id", "FROM analytics.events")));
+        assertEquals("SELECT id FROM analytics.events", AthenaDatabase.formatViewDefinition(List.of(
+                "CREATE VIEW analytics.report AS SELECT id FROM analytics.events")));
+        assertNull(AthenaDatabase.formatViewDefinition(List.of()));
+    }
+
+    @Test
+    public void generatesViewDdlForTargetSchema() {
+        CreateViewChange change = new CreateViewChange();
+        change.setSchemaName("target");
+        change.setViewName("report");
+        change.setSelectQuery(AthenaDatabase.formatViewDefinition(List.of(
+                "CREATE VIEW source.report AS", "SELECT id FROM source.events")));
+
+        SqlStatement statement = change.generateStatements(new AthenaDatabase())[0];
+        Sql[] sql = SqlGeneratorFactory.getInstance().generateSql(statement, new AthenaDatabase());
+
+        assertEquals("CREATE VIEW \"target\".report AS SELECT id FROM source.events", sql[0].toSql());
     }
 
     private static DatabaseConnection connection(String url, String productName, String catalog) {

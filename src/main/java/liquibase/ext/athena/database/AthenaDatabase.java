@@ -1,8 +1,11 @@
 package liquibase.ext.athena.database;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import liquibase.CatalogAndSchema;
 import liquibase.Scope;
@@ -15,6 +18,7 @@ import liquibase.executor.ExecutorService;
 import liquibase.ext.athena.configuration.AthenaConfiguration;
 import liquibase.statement.core.RawParameterizedSqlStatement;
 import liquibase.structure.DatabaseObject;
+import liquibase.structure.core.Catalog;
 import liquibase.structure.core.ForeignKey;
 import liquibase.structure.core.Index;
 import liquibase.structure.core.PrimaryKey;
@@ -32,6 +36,9 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
     private static final Set<String> PRODUCT_NAMES = Set.of("aws.athena", "amazon athena", "athena");
     private static final String DEFAULT_JDBC_DRIVER = "com.amazon.athena.jdbc.AthenaDriver";
     private static final int DEFAULT_JDBC_PORT = 443;
+    private static final Pattern CREATE_VIEW_PREFIX = Pattern.compile(
+            "^\\s*CREATE\\s+(?:OR\\s+REPLACE\\s+)?VIEW\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:\\S+|\"[^\"]+\")(?:\\s*\\.\\s*(?:\\S+|\"[^\"]+\"))*\\s+AS\\s+",
+            Pattern.CASE_INSENSITIVE);
 
     private static final Set<String> RESERVED_WORDS = Set.of(
             "ALL", "ALTER", "AND", "ARRAY", "AS", "AUTHORIZATION", "BETWEEN", "BIGINT", "BINARY", "BOOLEAN",
@@ -97,7 +104,18 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
 
     @Override
     public CatalogAndSchema.CatalogAndSchemaCase getSchemaAndCatalogCase() {
-        return CatalogAndSchema.CatalogAndSchemaCase.ORIGINAL_CASE;
+        // JDBC and information_schema can report AwsDataCatalog with different casing.
+        // ORIGINAL_CASE makes Liquibase cache these as different catalogs and lose rows.
+        return CatalogAndSchema.CatalogAndSchemaCase.LOWER_CASE;
+    }
+
+    @Override
+    public String correctObjectName(String objectName, final Class<? extends DatabaseObject> objectType) {
+        if (Catalog.class.equals(objectType)) {
+            // Keep the catalog's canonical spelling for Athena metadata API requests.
+            return objectName;
+        }
+        return super.correctObjectName(objectName, objectType);
     }
 
     @Override
@@ -106,7 +124,8 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
             // Athena recommend object names in lowercase. Athena will lowercase the name
             // for you to run the query.
             objectName = objectName.trim().toLowerCase();
-            if (mustQuoteObjectName(objectName, objectType)) {
+            // Preserve existing catalog/schema DDL quoting independently of cache normalization.
+            if (isCatalogOrSchemaType(objectType) || mustQuoteObjectName(objectName, objectType)) {
                 return quoteObject(objectName, objectType);
             } else if (quotingStrategy == ObjectQuotingStrategy.QUOTE_ALL_OBJECTS) {
                 return quoteObject(objectName, objectType);
@@ -211,10 +230,55 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
         CatalogAndSchema customizedSchema = schema.customize(this);
         String qualifiedViewName = escapeViewName(
                 customizedSchema.getCatalogName(), customizedSchema.getSchemaName(), viewName);
-        String definition = Scope.getCurrentScope().getSingleton(ExecutorService.class)
+        @SuppressWarnings("unchecked")
+        List<String> definitionLines = Scope.getCurrentScope().getSingleton(ExecutorService.class)
                 .getExecutor("jdbc", this)
-                .queryForObject(new RawParameterizedSqlStatement("SHOW CREATE VIEW " + qualifiedViewName), String.class);
-        return definition == null ? null : "FULL_DEFINITION: " + definition;
+                .queryForList(new RawParameterizedSqlStatement("SHOW CREATE VIEW " + qualifiedViewName), String.class);
+        return formatViewDefinition(definitionLines);
+    }
+
+    public String getTableDefinition(CatalogAndSchema schema, String tableName) throws DatabaseException {
+        CatalogAndSchema customizedSchema = schema.customize(this);
+        String qualifiedTableName = escapeTableNameForDdl(customizedSchema.getSchemaName(), tableName);
+        @SuppressWarnings("unchecked")
+        List<String> definitionLines = Scope.getCurrentScope().getSingleton(ExecutorService.class)
+                .getExecutor("jdbc", this)
+                .queryForList(new RawParameterizedSqlStatement("SHOW CREATE TABLE " + qualifiedTableName), String.class);
+        if (definitionLines == null || definitionLines.isEmpty()) {
+            throw new DatabaseException("No Athena table definition returned for " + qualifiedTableName);
+        }
+        String definition = String.join("\n", definitionLines);
+        if (definition.isBlank()) {
+            throw new DatabaseException("Empty Athena table definition returned for " + qualifiedTableName);
+        }
+        return definition;
+    }
+
+    /** Hive table DDL accepts database.table, without a catalog prefix. */
+    public String escapeTableNameForDdl(String schemaName, String tableName) {
+        if (schemaName == null) {
+            schemaName = getDefaultSchemaName();
+        }
+        return (schemaName == null || schemaName.isBlank() ? "" : quoteDdlIdentifier(schemaName) + ".")
+                + quoteDdlIdentifier(tableName);
+    }
+
+    private static String quoteDdlIdentifier(String name) {
+        return "`" + name.trim().toLowerCase(Locale.ROOT).replace("`", "``") + "`";
+    }
+
+    static String formatViewDefinition(List<String> definitionLines) {
+        if (definitionLines == null || definitionLines.isEmpty()) {
+            return null;
+        }
+        // Athena returns the CREATE VIEW statement one line per result row.
+        // Return only the query so Liquibase can create the view in the target schema.
+        String definition = String.join("\n", definitionLines);
+        Matcher createViewPrefix = CREATE_VIEW_PREFIX.matcher(definition);
+        if (createViewPrefix.find()) {
+            return definition.substring(createViewPrefix.end());
+        }
+        return definition;
     }
 
     /*********************************

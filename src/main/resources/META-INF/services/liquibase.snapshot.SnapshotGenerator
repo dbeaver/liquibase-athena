@@ -1,3 +1,4 @@
 liquibase.ext.athena.snapshot.AthenaForeignKeySnapshotGenerator
 liquibase.ext.athena.snapshot.AthenaSchemaSnapshotGenerator
 liquibase.ext.athena.snapshot.AthenaViewSnapshotGenerator
+liquibase.ext.athena.snapshot.AthenaTableSnapshotGenerator

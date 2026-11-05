@@ -1,13 +1,17 @@
 package liquibase.ext.athena.snapshot;
 
 import liquibase.database.Database;
+import liquibase.database.ObjectQuotingStrategy;
 import liquibase.exception.DatabaseException;
 import liquibase.ext.athena.database.AthenaDatabase;
+import liquibase.snapshot.CachedRow;
 import liquibase.snapshot.DatabaseSnapshot;
 import liquibase.snapshot.SnapshotGenerator;
 import liquibase.snapshot.jvm.ViewSnapshotGenerator;
 import liquibase.structure.DatabaseObject;
+import liquibase.structure.core.Schema;
 import liquibase.structure.core.View;
+import liquibase.util.StringUtil;
 
 /**
  * Uses Athena's {@code SHOW CREATE VIEW} support and keeps snapshot generation
@@ -31,13 +35,44 @@ public class AthenaViewSnapshotGenerator extends ViewSnapshotGenerator {
 
     @Override
     protected DatabaseObject snapshotObject(DatabaseObject example, DatabaseSnapshot snapshot) throws DatabaseException {
+        if (((View) example).getDefinition() != null) {
+            return example;
+        }
+        View view = null;
+        for (CachedRow row : AthenaRelationMetadata.getRelations(snapshot, example.getSchema(), true)) {
+            if (example.getName().equalsIgnoreCase(row.getString("TABLE_NAME"))) {
+                view = new View().setName(cleanNameFromDatabase(row.getString("TABLE_NAME"), snapshot.getDatabase()));
+                view.setSchema(example.getSchema());
+                view.setRemarks(row.getString("REMARKS"));
+                break;
+            }
+        }
+        if (view == null) {
+            return null;
+        }
+        Database database = snapshot.getDatabase();
+        ObjectQuotingStrategy originalStrategy = database.getObjectQuotingStrategy();
         try {
-            return super.snapshotObject(example, snapshot);
+            database.setObjectQuotingStrategy(ObjectQuotingStrategy.QUOTE_ALL_OBJECTS);
+            String definition = snapshot.getDatabase().getViewDefinition(view.getSchema().toCatalogAndSchema(), view.getName());
+            view.setDefinition(StringUtil.trimToNull(definition) == null ? "[CANNOT READ VIEW DEFINITION]" : definition);
         } catch (DatabaseException e) {
             // SHOW CREATE VIEW requires extra permissions for Data Catalog views.
             // A missing definition must not make the entire schema snapshot fail.
-            ((View) example).setDefinition("[CANNOT READ VIEW DEFINITION]");
-            return example;
+            view.setDefinition("[CANNOT READ VIEW DEFINITION]");
+        } finally {
+            database.setObjectQuotingStrategy(originalStrategy);
+        }
+        return view;
+    }
+
+    @Override
+    protected void addTo(DatabaseObject foundObject, DatabaseSnapshot snapshot) throws DatabaseException {
+        if (foundObject instanceof Schema schema && snapshot.getSnapshotControl().shouldInclude(View.class)) {
+            for (CachedRow row : AthenaRelationMetadata.getRelations(snapshot, schema, true)) {
+                schema.addDatabaseObject(new View().setName(cleanNameFromDatabase(row.getString("TABLE_NAME"), snapshot.getDatabase()))
+                        .setSchema(schema));
+            }
         }
     }
 }
