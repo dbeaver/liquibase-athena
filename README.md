@@ -121,6 +121,17 @@ The generic table model does not contain S3 locations, storage formats, or parti
 definitions. Add the required `LOCATION` and storage/partition clauses before executing
 generated table DDL. This path does not recreate Iceberg tables; use their native DDL.
 
+## Generated table changes
+
+`addColumn`, `dropColumn` and `dropTable` generate Athena Hive DDL: `ALTER TABLE ... ADD COLUMNS (...)`,
+`ALTER TABLE ... DROP COLUMN ...` and `DROP TABLE ...` with backtick-quoted names and no catalog prefix.
+Column types reported with a length that Hive does not accept, such as `STRING(65535)`, are written without it.
+
+Validation reports the changes Athena cannot apply instead of generating generic SQL for them:
+`dropColumn` on a table which is known not to be Iceberg (the table format is read with `SHOW CREATE TABLE`;
+a table which cannot be read yet only gets a warning), added columns with constraints or default values, `modifyDataType`, nullability and default value changes,
+primary keys, foreign keys, unique constraints and indexes.
+
 ## Issue Tracking
 
 Any issues can be logged in the [Github issue tracker](https://github.com/alvsanand/liquibase-athena/issues).

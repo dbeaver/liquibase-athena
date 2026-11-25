@@ -69,6 +69,20 @@ public class TestCreateAthenaTableChange {
     }
 
     @Test
+    public void removesOnlyAnEmptyTrailingPropertyList() {
+        String body = "(`payload` binary COMMENT 'TBLPROPERTIES ()') LOCATION 's3://bucket/TBLPROPERTIES ()'";
+        for (String suffix : new String[] { " TBLPROPERTIES ()", "\ntblproperties (\n) ; \n" }) {
+            CreateAthenaTableChange change = change("CREATE EXTERNAL TABLE source.events " + body + suffix);
+
+            assertEquals("CREATE EXTERNAL TABLE `target`.`events` " + body, sql(change));
+            assertEquals("CREATE EXTERNAL TABLE source.events " + body + suffix, change.getTableDefinition());
+        }
+        String properties = body + " TBLPROPERTIES ('comment'='TBLPROPERTIES ()')";
+        assertEquals("CREATE EXTERNAL TABLE `target`.`events` " + properties,
+                sql(change("CREATE EXTERNAL TABLE source.events " + properties)));
+    }
+
+    @Test
     public void usesDefaultSchemaAndRetainsIfNotExists() {
         CreateAthenaTableChange change = change("CREATE EXTERNAL TABLE IF NOT EXISTS events " + BODY);
         change.setSchemaName(null);

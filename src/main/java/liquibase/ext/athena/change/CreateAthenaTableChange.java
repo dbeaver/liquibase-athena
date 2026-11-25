@@ -26,6 +26,10 @@ public class CreateAthenaTableChange extends CreateTableChange {
                     + IDENTIFIER + "(?:\\s*\\.\\s*" + IDENTIFIER + ")*\\s*(?=\\()",
             Pattern.CASE_INSENSITIVE);
 
+    // Athena rejects an empty property list, which a copied definition may end with.
+    private static final Pattern EMPTY_TABLE_PROPERTIES = Pattern.compile(
+            "\\s+TBLPROPERTIES\\s*\\(\\s*\\)\\s*;?\\s*$", Pattern.CASE_INSENSITIVE);
+
     private String tableDefinition;
 
     @DatabaseChangeProperty(description = "Complete source SHOW CREATE TABLE definition",
@@ -52,7 +56,8 @@ public class CreateAthenaTableChange extends CreateTableChange {
         String tableName = ((AthenaDatabase) database).escapeTableNameForDdl(getSchemaName(), getTableName());
         String sql = prefix.group(1)
                 + (Boolean.TRUE.equals(getIfNotExists()) || prefix.group(2) != null ? "IF NOT EXISTS " : "")
-                + tableName + " " + tableDefinition.substring(prefix.end());
+                + tableName + " "
+                + EMPTY_TABLE_PROPERTIES.matcher(tableDefinition.substring(prefix.end())).replaceFirst("");
         return new SqlStatement[] { new RawParameterizedSqlStatement(sql) };
     }
 
