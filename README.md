@@ -141,12 +141,17 @@ the schema its definition was copied from: `SELECT id FROM src.orders` becomes `
 Only the relation names of the compared schemas are rewritten; relations of other schemas, expressions, aliases,
 comments and literals keep their text.
 
-A definition which cannot be rewritten safely is left unchanged, and validation of its `createView` change reports why.
-This happens when the query cannot be parsed, or when it qualifies columns with the name of an unaliased relation
-(`SELECT src.orders.id FROM src.orders`): give such relations explicit aliases.
+Views are generated in the order which creates a view after the views it reads. A view which differs from the
+reference one only by the names of the compared schemas is not replaced; the plain `diff` report still lists it
+as changed, because the definition text differs.
 
-Generated views are not ordered by their dependencies on each other. A later comparison of the two schemas still
-reports a rewritten view as changed, because its definition text differs from the reference one.
+Validation of a `createView` change reports a view which cannot be created:
+
+* its definition cannot be rewritten safely, because the query cannot be parsed or qualifies columns with the name
+  of an unaliased relation (`SELECT src.orders.id FROM src.orders`); give such relations explicit aliases;
+* it reads such a view, or views read each other in a cycle.
+
+The definition of such a view is left unchanged.
 
 ## Issue Tracking
 

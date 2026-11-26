@@ -1,4 +1,4 @@
-package liquibase.ext.athena.database;
+package liquibase.ext.athena.diff;
 
 import java.util.HashMap;
 import java.util.List;
@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 import liquibase.CatalogAndSchema;
 import liquibase.diff.compare.CompareControl;
 import liquibase.exception.DatabaseException;
-import liquibase.ext.athena.database.AthenaViewReferences.Relation;
+import liquibase.ext.athena.diff.AthenaViewReferences.Relation;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -182,12 +182,12 @@ public class TestAthenaViewReferences {
                 "WITH base_view AS (SELECT * FROM base_view) SELECT * FROM base_view",
                 "WITH nested AS (SELECT * FROM base_view), base_view AS (SELECT 1) SELECT * FROM nested",
                 "SELECT * FROM (WITH base_view AS (SELECT 1) SELECT * FROM base_view) nested JOIN base_view ON true")) {
-            assertEquals(sql, Set.of(view), AthenaViewReferences.references(sql, CATALOG));
+            assertEquals(sql, Set.of(view), references(sql));
         }
         for (String sql : List.of("WITH base_view AS (SELECT 1) SELECT * FROM base_view",
                 "WITH RECURSIVE \"BASE_VIEW\" AS (SELECT 1) SELECT * FROM base_view UNION ALL SELECT * FROM base_view",
                 "WITH base_view AS (SELECT 1), nested AS (SELECT * FROM base_view) SELECT * FROM nested")) {
-            assertEquals(sql, Set.of(), AthenaViewReferences.references(sql, CATALOG));
+            assertEquals(sql, Set.of(), references(sql));
         }
     }
 
@@ -197,6 +197,12 @@ public class TestAthenaViewReferences {
                 AthenaViewReferences.canonical("select 'é😀 SRC.departments' as text /* comment */ from TGT.departments"));
         assertNotEquals(AthenaViewReferences.canonical("SELECT 'SRC.departments' FROM tgt.departments"),
                 AthenaViewReferences.canonical("SELECT 'src.departments' FROM tgt.departments"));
+    }
+
+    private static Set<Relation> references(String sql) throws DatabaseException {
+        Map<Relation, Relation> references = new HashMap<>();
+        AthenaViewReferences.remap(sql, Map.of(), CATALOG, references);
+        return references.keySet();
     }
 
     private static String remap(String sql) throws DatabaseException {

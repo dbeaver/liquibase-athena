@@ -1,18 +1,19 @@
 package liquibase.ext.athena.diff;
 
 import liquibase.change.Change;
-import liquibase.change.core.CreateViewChange;
 import liquibase.database.Database;
 import liquibase.diff.ObjectDifferences;
 import liquibase.diff.output.DiffOutputControl;
 import liquibase.diff.output.changelog.ChangeGeneratorChain;
 import liquibase.diff.output.changelog.core.ChangedViewChangeGenerator;
-import liquibase.ext.athena.change.CreateAthenaViewChange;
 import liquibase.ext.athena.database.AthenaDatabase;
 import liquibase.structure.DatabaseObject;
 import liquibase.structure.core.View;
 
-/** A view replaced by a view of another schema has to read its own schema, like a missing one. */
+/**
+ * A view which differs from the reference one only by the names of the compared schemas is left alone.
+ * When a view is replaced, the first changed view generates the changes of all views, see {@link AthenaViewPlan}.
+ */
 public class AthenaChangedViewChangeGenerator extends ChangedViewChangeGenerator {
     @Override
     public int getPriority(Class<? extends DatabaseObject> objectType, Database database) {
@@ -23,13 +24,8 @@ public class AthenaChangedViewChangeGenerator extends ChangedViewChangeGenerator
     @Override
     public Change[] fixChanged(DatabaseObject changedObject, ObjectDifferences differences, DiffOutputControl control,
             Database referenceDatabase, Database comparisonDatabase, ChangeGeneratorChain chain) {
-        Change[] changes = super.fixChanged(changedObject, differences, control, referenceDatabase, comparisonDatabase, chain);
-        AthenaMissingViewChangeGenerator.mapReferences(changes, control, referenceDatabase, comparisonDatabase);
-        return changes;
-    }
-
-    @Override
-    protected CreateViewChange createViewChange() {
-        return new CreateAthenaViewChange();
+        AthenaViewPlan plan = AthenaViewPlan.of((View) changedObject, differences, control, referenceDatabase, comparisonDatabase);
+        // Liquibase generates changed objects first; without a replaced view the new views wait for their own turn.
+        return plan.replacesViews() ? plan.takeChanges(control) : null;
     }
 }

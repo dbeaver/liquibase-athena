@@ -1,17 +1,18 @@
 package liquibase.ext.athena.diff;
 
 import liquibase.change.Change;
-import liquibase.change.core.CreateViewChange;
 import liquibase.database.Database;
 import liquibase.diff.output.DiffOutputControl;
 import liquibase.diff.output.changelog.ChangeGeneratorChain;
 import liquibase.diff.output.changelog.core.MissingViewChangeGenerator;
-import liquibase.ext.athena.change.CreateAthenaViewChange;
 import liquibase.ext.athena.database.AthenaDatabase;
 import liquibase.structure.DatabaseObject;
 import liquibase.structure.core.View;
 
-/** A view generated for another schema has to read that schema instead of the schema it was copied from. */
+/**
+ * A view generated for another schema has to read that schema instead of the schema it was copied from,
+ * and has to be created after the views it reads. The first missing view generates the changes of all views.
+ */
 public class AthenaMissingViewChangeGenerator extends MissingViewChangeGenerator {
     @Override
     public int getPriority(Class<? extends DatabaseObject> objectType, Database database) {
@@ -22,23 +23,6 @@ public class AthenaMissingViewChangeGenerator extends MissingViewChangeGenerator
     @Override
     public Change[] fixMissing(DatabaseObject missingObject, DiffOutputControl control, Database referenceDatabase,
             Database comparisonDatabase, ChangeGeneratorChain chain) {
-        Change[] changes = super.fixMissing(missingObject, control, referenceDatabase, comparisonDatabase, chain);
-        mapReferences(changes, control, referenceDatabase, comparisonDatabase);
-        return changes;
-    }
-
-    @Override
-    protected CreateViewChange createViewChange() {
-        return new CreateAthenaViewChange();
-    }
-
-    static void mapReferences(Change[] changes, DiffOutputControl control, Database referenceDatabase,
-            Database comparisonDatabase) {
-        for (Change change : changes) {
-            if (change instanceof CreateAthenaViewChange view) {
-                view.mapReferences(control.getSchemaComparisons(), referenceDatabase.getDefaultCatalogName(),
-                        comparisonDatabase.getDefaultCatalogName());
-            }
-        }
+        return AthenaViewPlan.of((View) missingObject, null, control, referenceDatabase, comparisonDatabase).takeChanges(control);
     }
 }

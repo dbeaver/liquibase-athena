@@ -1,4 +1,4 @@
-package liquibase.ext.athena.database;
+package liquibase.ext.athena.diff;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,21 +32,21 @@ import net.sf.jsqlparser.statement.select.Select;
  * Makes a view query read the schemas of the comparison database instead of the reference schemas it was written for.
  * Only relation names are rewritten: expressions, aliases, comments and literals keep their text.
  */
-public final class AthenaViewReferences {
+final class AthenaViewReferences {
     private static final long PARSE_TIMEOUT_MS = 1000;
 
     private AthenaViewReferences() {
     }
 
     /** A relation name with unquoted lower case parts. An unqualified name has an empty catalog and schema. */
-    public record Relation(String catalog, String schema, String name) {
-        public static Relation of(String catalog, String schema, String name, String defaultCatalog) {
+    record Relation(String catalog, String schema, String name) {
+        static Relation of(String catalog, String schema, String name, String defaultCatalog) {
             return new Relation(identifier(catalog == null ? defaultCatalog : catalog), identifier(schema), identifier(name));
         }
     }
 
     /** The reference schemas which are compared with another schema. The relation name of the entries is empty. */
-    public static Map<Relation, Relation> schemas(CompareControl.SchemaComparison[] comparisons, String referenceCatalog,
+    static Map<Relation, Relation> schemas(CompareControl.SchemaComparison[] comparisons, String referenceCatalog,
             String comparisonCatalog) {
         Map<Relation, Relation> schemas = new HashMap<>();
         if (comparisons == null) {
@@ -71,7 +71,7 @@ public final class AthenaViewReferences {
      * Rewrites the relations of the given schemas. Every relation which the query reads is added to {@code references}:
      * the key is the relation as written, the value is the relation which the result reads.
      */
-    public static String remap(String query, Map<Relation, Relation> schemas, String defaultCatalog,
+    static String remap(String query, Map<Relation, Relation> schemas, String defaultCatalog,
             Map<Relation, Relation> references) throws DatabaseException {
         List<SimpleNode> nodes = parse(query);
         Map<Token, String> edits = new HashMap<>();
@@ -133,15 +133,8 @@ public final class AthenaViewReferences {
         return result.toString();
     }
 
-    /** The relations which the query reads. */
-    public static Set<Relation> references(String query, String defaultCatalog) throws DatabaseException {
-        Map<Relation, Relation> references = new HashMap<>();
-        remap(query, Map.of(), defaultCatalog, references);
-        return references.keySet();
-    }
-
     /** The tokens of the query without comments and letter case differences, to compare two definitions. */
-    public static List<String> canonical(String query) throws DatabaseException {
+    static List<String> canonical(String query) throws DatabaseException {
         return tokens(parse(query).get(0)).stream().filter(token -> !";".equals(token.image))
                 .map(token -> token.kind == CCJSqlParserConstants.S_CHAR_LITERAL ? token.image : identifier(token.image))
                 .toList();
