@@ -25,6 +25,8 @@ The following dependencies have to be available before using it:
 
 Download [the latest released Liquibase extension](https://github.com/alvsanand/liquibase-athena/releases) `.jar` file and place it in the `liquibase/lib` install directory. If you want to use another location, specify the extension `.jar` and `athena-jdbc-*.jar` file in the `classpath` of your [liquibase.properties file](https://docs.liquibase.com/workflows/liquibase-community/creating-config-properties.html).
 
+Comparing views of two schemas also needs [JSQLParser](https://github.com/JSQLParser/JSqlParser) 5.3 (`jsqlparser-5.3.jar`) on the same classpath. Maven resolves it as a dependency of the extension.
+
 ### Maven
 
 First, add Github repository authentication to your ```pom.xml``` or ```settings.xml+```:
@@ -131,6 +133,20 @@ Validation reports the changes Athena cannot apply instead of generating generic
 `dropColumn` on a table which is known not to be Iceberg (the table format is read with `SHOW CREATE TABLE`;
 a table which cannot be read yet only gets a warning), added columns with constraints or default values, `modifyDataType`, nullability and default value changes,
 primary keys, foreign keys, unique constraints and indexes.
+
+## Generated views
+
+When a schema is compared with a schema of another name, a generated view reads the comparison schema instead of
+the schema its definition was copied from: `SELECT id FROM src.orders` becomes `SELECT id FROM "tgt".orders`.
+Only the relation names of the compared schemas are rewritten; relations of other schemas, expressions, aliases,
+comments and literals keep their text.
+
+A definition which cannot be rewritten safely is left unchanged, and validation of its `createView` change reports why.
+This happens when the query cannot be parsed, or when it qualifies columns with the name of an unaliased relation
+(`SELECT src.orders.id FROM src.orders`): give such relations explicit aliases.
+
+Generated views are not ordered by their dependencies on each other. A later comparison of the two schemas still
+reports a rewritten view as changed, because its definition text differs from the reference one.
 
 ## Issue Tracking
 
