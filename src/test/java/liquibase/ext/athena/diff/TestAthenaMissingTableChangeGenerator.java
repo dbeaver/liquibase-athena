@@ -1,12 +1,15 @@
 package liquibase.ext.athena.diff;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import liquibase.CatalogAndSchema;
 import liquibase.change.Change;
 import liquibase.change.core.CreateTableChange;
+import liquibase.change.core.CreateViewChange;
 import liquibase.database.core.H2Database;
 import liquibase.diff.DiffResult;
+import liquibase.diff.ObjectDifferences;
 import liquibase.diff.compare.CompareControl;
 import liquibase.diff.output.DiffOutputControl;
 import liquibase.diff.output.changelog.ChangeGenerator;
@@ -84,6 +87,48 @@ public class TestAthenaMissingTableChangeGenerator {
         assertEquals(1, changeSets.size());
         assertEquals(1, changeSets.get(0).getChanges().size());
         assertTrue(changeSets.get(0).getChanges().get(0) instanceof CreateAthenaTableChange);
+    }
+
+    @Test
+    public void createsMissingTablesBeforeReplacedAndDependentViews() throws Exception {
+        var comparisons = new CompareControl.SchemaComparison[] { new CompareControl.SchemaComparison(
+                new CatalogAndSchema("AwsDataCatalog", "source"), new CatalogAndSchema("AwsDataCatalog", "target")) };
+        for (boolean missingViews : new boolean[] { false, true }) {
+            AthenaDatabase source = new AthenaDatabase() {
+                @Override
+                public String getTableDefinition(CatalogAndSchema schema, String tableName) {
+                    return DEFINITION;
+                }
+            };
+            source.setDefaultCatalogName("AwsDataCatalog");
+            AthenaDatabase target = new AthenaDatabase();
+            target.setDefaultCatalogName("AwsDataCatalog");
+            DiffResult result = new DiffResult(new EmptyDatabaseSnapshot(source), new EmptyDatabaseSnapshot(target),
+                    new CompareControl(comparisons, "tables,views,columns"));
+            Table table = table();
+            result.addMissingObject(table);
+            table.getColumns().forEach(result::addMissingObject);
+            View replaced = new View("AwsDataCatalog", "source", "z_view");
+            replaced.setDefinition("SELECT id, 1 AS extra FROM source.events");
+            result.addChangedObject(replaced, new ObjectDifferences(new CompareControl())
+                    .addDifference("definition", replaced.getDefinition(), "SELECT id FROM target.events"));
+            if (missingViews) {
+                View dependent = new View("AwsDataCatalog", "source", "a_view");
+                dependent.setDefinition("SELECT id, extra FROM source.z_view");
+                result.addMissingObject(dependent);
+                View readsTable = new View("AwsDataCatalog", "source", "b_view");
+                readsTable.setDefinition("SELECT id FROM source.events");
+                result.addMissingObject(readsTable);
+            }
+
+            List<Change> changes = new DiffToChangeLog(result, new DiffOutputControl(true, true, false, comparisons))
+                    .generateChangeSets().stream().flatMap(changeSet -> changeSet.getChanges().stream()).toList();
+
+            assertTrue(changes.get(0) instanceof CreateAthenaTableChange);
+            assertEquals(missingViews ? List.of("events", "b_view", "z_view", "a_view") : List.of("events", "z_view"),
+                    changes.stream().map(change -> change instanceof CreateTableChange created ? created.getTableName()
+                            : ((CreateViewChange) change).getViewName()).toList());
+        }
     }
 
     @Test

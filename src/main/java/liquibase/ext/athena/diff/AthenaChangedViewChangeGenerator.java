@@ -25,7 +25,8 @@ public class AthenaChangedViewChangeGenerator extends ChangedViewChangeGenerator
     public Change[] fixChanged(DatabaseObject changedObject, ObjectDifferences differences, DiffOutputControl control,
             Database referenceDatabase, Database comparisonDatabase, ChangeGeneratorChain chain) {
         AthenaViewPlan plan = AthenaViewPlan.of((View) changedObject, differences, control, referenceDatabase, comparisonDatabase);
-        // Liquibase generates changed objects first; without a replaced view the new views wait for their own turn.
+        // Liquibase visits changed objects first, but emits its create batch before its update batch.
+        // Keep dependent views together in the update batch when any existing view must be replaced.
         return plan.replacesViews() ? plan.takeChanges(control) : null;
     }
 }
