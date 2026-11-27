@@ -25,6 +25,8 @@ The following dependencies have to be available before using it:
 
 Download [the latest released Liquibase extension](https://github.com/alvsanand/liquibase-athena/releases) `.jar` file and place it in the `liquibase/lib` install directory. If you want to use another location, specify the extension `.jar` and `athena-jdbc-*.jar` file in the `classpath` of your [liquibase.properties file](https://docs.liquibase.com/workflows/liquibase-community/creating-config-properties.html).
 
+Comparing views of two schemas also needs [JSQLParser](https://github.com/JSQLParser/JSqlParser) 5.3 (`jsqlparser-5.3.jar`) on the same classpath. Maven resolves it as a dependency of the extension.
+
 ### Maven
 
 First, add Github repository authentication to your ```pom.xml``` or ```settings.xml+```:
@@ -120,6 +122,40 @@ database and column names, without a catalog prefix or numeric display widths.
 The generic table model does not contain S3 locations, storage formats, or partition
 definitions. Add the required `LOCATION` and storage/partition clauses before executing
 generated table DDL. This path does not recreate Iceberg tables; use their native DDL.
+
+## Generated table changes
+
+`addColumn`, `dropColumn` and `dropTable` generate Athena Hive DDL: `ALTER TABLE ... ADD COLUMNS (...)`,
+`ALTER TABLE ... DROP COLUMN ...` and `DROP TABLE ...` with backtick-quoted names and no catalog prefix.
+Column types reported with a length that Hive does not accept, such as `STRING(65535)`, are written without it.
+
+Validation reports the changes Athena cannot apply instead of generating generic SQL for them:
+`dropColumn` on a table which is known not to be Iceberg (the table format is read with `SHOW CREATE TABLE`;
+a table which cannot be read yet is not rejected), added columns with constraints or default values,
+and `modifyDataType`.
+Adding a `DATE` column is also rejected for a known external/Hive table; Iceberg tables can add it.
+
+## Generated views
+
+When a schema is compared with a schema of another name, a generated view reads the comparison schema instead of
+the schema its definition was copied from: `SELECT id FROM src.orders` becomes `SELECT id FROM "tgt".orders`.
+Only the relation names of the compared schemas are rewritten; relations of other schemas, expressions, aliases,
+comments and literals keep their text.
+
+Views are generated in the order which creates a view after the views it reads. A view which differs from the
+reference one only by the names of the compared schemas is not replaced; the plain `diff` report still lists it
+as changed, because the definition text differs.
+
+Validation of a `createView` change reports a view which cannot be created:
+
+* its definition cannot be rewritten safely, because the query cannot be parsed or qualifies columns with the name
+  of an unaliased relation (`SELECT src.orders.id FROM src.orders`); give such relations explicit aliases;
+* it reads such a view, or views read each other in a cycle.
+
+The definition of such a view is left unchanged. Rejected views are saved as `createAthenaView` changes with
+their validation error, so loading an XML, JSON or YAML changelog does not make them executable.
+Supported views keep the standard `createView` format. A schema-only difference is ignored only when the
+referenced relations have known, matching columns in both snapshots.
 
 ## Issue Tracking
 

@@ -4,7 +4,7 @@
 
     <groupId>liquibase</groupId>
     <artifactId>athena</artifactId>
-    <version>0.5.7</version>
+    <version>0.5.8</version>
     <packaging>jar</packaging>
 
     <description>Liquibase extension for AWS Athena.</description>
@@ -53,6 +53,12 @@
             <artifactId>liquibase-core</artifactId>
             <version>${liquibase.version}</version>
             <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>5.3</version>
         </dependency>
 
         <dependency>

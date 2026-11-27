@@ -2,6 +2,7 @@ package liquibase.ext.athena.sqlgenerator;
 
 import java.util.Locale;
 import java.util.StringJoiner;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import liquibase.database.Database;
@@ -19,8 +20,9 @@ import liquibase.statement.core.CreateTableStatement;
  * Storage clauses are not represented by Liquibase's generic CreateTableStatement.
  */
 public class AthenaCreateTableGenerator extends CreateTableGenerator {
-    private static final Pattern NUMERIC_DISPLAY_WIDTH = Pattern.compile(
-            "(?i)^(TINYINT|SMALLINT|INT|INTEGER|BIGINT|FLOAT|REAL|DOUBLE)\\s*\\(\\s*\\d+\\s*\\)$");
+    private static final Pattern TYPE_WITH_LENGTH = Pattern.compile(
+            "(?i)^(TINYINT|SMALLINT|INT|INTEGER|BIGINT|FLOAT|REAL|DOUBLE|BOOLEAN|STRING|DATE|TIMESTAMP|BINARY|BLOB)"
+                    + "\\s*\\(\\s*\\d+\\s*\\)$");
 
     @Override
     public int getPriority() {
@@ -69,27 +71,30 @@ public class AthenaCreateTableGenerator extends CreateTableGenerator {
                 statement.getSchemaName(), statement.getTableName());
         StringJoiner columns = new StringJoiner(", ");
         for (String column : statement.getColumns()) {
-            String type = statement.getColumnTypes().get(column).toDatabaseDataType(database).toString();
-            type = NUMERIC_DISPLAY_WIDTH.matcher(type).replaceFirst("$1");
-            if ("INTEGER".equalsIgnoreCase(type)) {
-                type = "INT";
-            } else if ("REAL".equalsIgnoreCase(type)) {
-                type = "FLOAT";
-            } else if ("VARCHAR".equalsIgnoreCase(type) || "TEXT".equalsIgnoreCase(type)) {
-                type = "STRING";
-            }
-            columns.add(quoteIdentifier(column) + " " + type + comment(statement.getColumnRemarks(column), database));
+            String type = toHiveType(statement.getColumnTypes().get(column).toDatabaseDataType(database).toString());
+            columns.add(AthenaDatabase.quoteDdlIdentifier(column) + " " + type
+                    + comment(statement.getColumnRemarks(column)));
         }
         String sql = "CREATE EXTERNAL TABLE " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
-                + tableName + " (" + columns + ")" + comment(statement.getRemarks(), database);
+                + tableName + " (" + columns + ")" + comment(statement.getRemarks());
         return new Sql[] { new UnparsedSql(sql, getAffectedTable(statement)) };
     }
 
-    private static String quoteIdentifier(String name) {
-        return "`" + name.trim().toLowerCase(Locale.ROOT).replace("`", "``") + "`";
+    /** JDBC metadata reports a length for types which take none in Hive DDL, and names some types differently. */
+    static String toHiveType(String type) {
+        Matcher length = TYPE_WITH_LENGTH.matcher(type.trim());
+        String name = length.matches() ? length.group(1).toUpperCase(Locale.ROOT) : type.trim();
+        return switch (name.toUpperCase(Locale.ROOT)) {
+            case "INTEGER" -> "INT";
+            case "REAL" -> "FLOAT";
+            case "BLOB" -> "BINARY";
+            case "VARCHAR", "TEXT" -> "STRING";
+            default -> name;
+        };
     }
 
-    private static String comment(String remarks, Database database) {
-        return remarks == null ? "" : " COMMENT '" + database.escapeStringForDatabase(remarks) + "'";
+    // Hive DDL uses backslash escapes, unlike Trino SELECT string literals.
+    static String comment(String remarks) {
+        return remarks == null ? "" : " COMMENT '" + remarks.replace("\\", "\\\\").replace("'", "\\'") + "'";
     }
 }

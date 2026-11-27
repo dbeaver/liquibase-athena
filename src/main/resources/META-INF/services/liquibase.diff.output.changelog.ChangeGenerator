@@ -1,1 +1,3 @@
 liquibase.ext.athena.diff.AthenaMissingTableChangeGenerator
+liquibase.ext.athena.diff.AthenaMissingViewChangeGenerator
+liquibase.ext.athena.diff.AthenaChangedViewChangeGenerator

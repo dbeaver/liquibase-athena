@@ -263,7 +263,8 @@ public class AthenaDatabase extends AbstractJdbcDatabase {
                 + quoteDdlIdentifier(tableName);
     }
 
-    private static String quoteDdlIdentifier(String name) {
+    /** Hive DDL quotes identifiers with backticks and stores them in lower case. */
+    public static String quoteDdlIdentifier(String name) {
         return "`" + name.trim().toLowerCase(Locale.ROOT).replace("`", "``") + "`";
     }
 

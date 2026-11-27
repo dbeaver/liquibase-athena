@@ -70,7 +70,20 @@ public class TestAthenaCreateTableGenerator {
         column.setRemarks("A \"quoted\" name");
 
         assertEquals("CREATE EXTERNAL TABLE `events` (`id` BIGINT COMMENT 'A \"quoted\" name') "
-                + "COMMENT 'Owner''s BIGINT(8)'", generateSql(change, new AthenaDatabase()));
+                + "COMMENT 'Owner\\'s BIGINT(8)'", generateSql(change, new AthenaDatabase()));
+    }
+
+    @Test
+    public void usesHiveEscapingForTableAndColumnComments() {
+        String remarks = "Owner's C:\\data\\n";
+        String literal = "'Owner\\'s C:\\\\data\\\\n'";
+        CreateTableChange change = new CreateTableChange();
+        change.setTableName("events");
+        change.setRemarks(remarks);
+        addColumn(change, "id", "BIGINT").setRemarks(remarks);
+
+        assertEquals("CREATE EXTERNAL TABLE `events` (`id` BIGINT COMMENT " + literal + ") COMMENT " + literal,
+                generateSql(change, new AthenaDatabase()));
     }
 
     @Test
