@@ -24,6 +24,9 @@ public class AthenaChangedViewChangeGenerator extends ChangedViewChangeGenerator
     @Override
     public Change[] fixChanged(DatabaseObject changedObject, ObjectDifferences differences, DiffOutputControl control,
             Database referenceDatabase, Database comparisonDatabase, ChangeGeneratorChain chain) {
+        if (!(comparisonDatabase instanceof AthenaDatabase)) {
+            return chain.fixChanged(changedObject, differences, control, referenceDatabase, comparisonDatabase);
+        }
         AthenaViewPlan plan = AthenaViewPlan.of((View) changedObject, differences, control, referenceDatabase, comparisonDatabase);
         // Liquibase visits changed objects first, but emits its create batch before its update batch.
         // Keep dependent views together in the update batch when any existing view must be replaced.

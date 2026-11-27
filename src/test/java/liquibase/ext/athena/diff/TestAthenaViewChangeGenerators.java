@@ -11,6 +11,7 @@ import liquibase.change.Change;
 import liquibase.change.core.CreateViewChange;
 import liquibase.changelog.ChangeSet;
 import liquibase.database.Database;
+import liquibase.database.core.H2Database;
 import liquibase.diff.DiffResult;
 import liquibase.diff.ObjectDifferences;
 import liquibase.diff.compare.CompareControl;
@@ -125,6 +126,24 @@ public class TestAthenaViewChangeGenerators {
 
             assertEquals(sql, change.getSelectQuery());
             assertNull(change.getReferenceError());
+        }
+    }
+
+    @Test
+    public void usesStandardViewChangesForOtherTargetDatabases() {
+        var comparisons = new CompareControl.SchemaComparison[] { new CompareControl.SchemaComparison(
+                new CatalogAndSchema("awsdatacatalog", "src"), new CatalogAndSchema(null, "PUBLIC")) };
+        for (boolean changed : new boolean[] { false, true }) {
+            View view = view("departments_view", "SELECT id FROM src.departments");
+            var control = new DiffOutputControl(true, true, false, comparisons);
+            Change[] changes = changed ? ChangeGeneratorFactory.getInstance().fixChanged(view,
+                    differences(view, "SELECT 1 AS id"), control, database(), new H2Database())
+                    : ChangeGeneratorFactory.getInstance().fixMissing(view, control, database(), new H2Database());
+            CreateViewChange generated = List.of(changes).stream().filter(CreateViewChange.class::isInstance)
+                    .map(CreateViewChange.class::cast).findFirst().orElseThrow();
+
+            assertEquals(view.getDefinition(), generated.getSelectQuery());
+            assertEquals(CreateViewChange.class, generated.getClass());
         }
     }
 

@@ -23,6 +23,9 @@ public class AthenaMissingViewChangeGenerator extends MissingViewChangeGenerator
     @Override
     public Change[] fixMissing(DatabaseObject missingObject, DiffOutputControl control, Database referenceDatabase,
             Database comparisonDatabase, ChangeGeneratorChain chain) {
+        if (!(comparisonDatabase instanceof AthenaDatabase)) {
+            return chain.fixMissing(missingObject, control, referenceDatabase, comparisonDatabase);
+        }
         return AthenaViewPlan.of((View) missingObject, null, control, referenceDatabase, comparisonDatabase).takeChanges(control);
     }
 }
