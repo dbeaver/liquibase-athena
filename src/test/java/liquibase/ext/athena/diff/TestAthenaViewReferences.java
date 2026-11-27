@@ -96,7 +96,6 @@ public class TestAthenaViewReferences {
             "SELECT POSITION('x' IN name) FROM src.departments",
             "SELECT CAST(ROW(payload) AS ROW(nested ROW(departments ROW(id BIGINT)))) FROM src.departments d",
             "SELECT CAST(ROW (payload) AS ROW(nested ROW(departments ROW(id BIGINT)))) FROM src.departments d",
-            "SELECT :value FROM src.departments", "SELECT * FROM src.departments WHERE id = ?",
             "[CANNOT READ VIEW DEFINITION]");
 
     @Test

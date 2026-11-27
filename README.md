@@ -131,8 +131,8 @@ Column types reported with a length that Hive does not accept, such as `STRING(6
 
 Validation reports the changes Athena cannot apply instead of generating generic SQL for them:
 `dropColumn` on a table which is known not to be Iceberg (the table format is read with `SHOW CREATE TABLE`;
-a table which cannot be read yet only gets a warning), added columns with constraints or default values, `modifyDataType`, nullability and default value changes,
-primary keys, foreign keys, unique constraints and indexes.
+a table which cannot be read yet is not rejected), added columns with constraints or default values,
+and `modifyDataType`.
 
 ## Generated views
 

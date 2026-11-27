@@ -78,15 +78,15 @@ public class TestAthenaViewChangeGenerators {
     }
 
     @Test
-    public void keepsAQueryWhichCannotReadAMappedSchema() {
+    public void rejectsQueriesWhoseDependenciesCannotBeAnalysed() {
         for (String sql : List.of("SELECT", "SELECT id FROM", "SELECT POSITION('x' IN name) FROM other.records",
-                "SELECT * FROM other.records WHERE id = ?",
                 "WITH r AS (SELECT POSITION('x' IN name) AS p FROM other.records) SELECT p FROM r",
                 " (SELECT POSITION('x' IN name) FROM other.records)")) {
             CreateAthenaViewChange change = missing(sql, COMPARISONS);
 
             assertEquals(sql, change.getSelectQuery());
-            assertNull(sql, change.getReferenceError());
+            assertTrue(sql, change.getReferenceError().startsWith(CANNOT_MAP + "departments_view to the target schema: "));
+            assertTrue(sql, change.validate(database()).hasErrors());
         }
     }
 
@@ -162,12 +162,28 @@ public class TestAthenaViewChangeGenerators {
     }
 
     @Test
-    public void ordersViewsAfterAViewWhichIsKeptUnparsed() throws Exception {
+    public void rejectsUnparsedViewsWithUnqualifiedDependencies() throws Exception {
+        String query = "SELECT CAST(ROW(ROW(ROW(id))) AS ROW(nested ROW(departments ROW(id BIGINT)))) AS payload FROM z_view";
+        for (String base : List.of("SELECT 1 AS id", "SELECT src.departments.id FROM src.departments")) {
+            List<CreateViewChange> changes = generate(List.of(view("a_view", query), view("z_view", base),
+                    view("top_view", "SELECT * FROM a_view"), view("independent_view", "SELECT 1 AS id")), Map.of());
+
+            Map<String, String> rejected = rejected(changes);
+            assertTrue(rejected.getOrDefault("a_view", "").startsWith(CANNOT_MAP + "a_view to the target schema: "));
+            assertEquals("Cannot create Athena view top_view" + DEPENDS, rejected.get("top_view"));
+            assertFalse(rejected.containsKey("independent_view"));
+            assertEquals(query, changes.stream().filter(change -> "a_view".equals(change.getViewName()))
+                    .findFirst().orElseThrow().getSelectQuery());
+        }
+    }
+
+    @Test
+    public void rejectsViewsBuiltOnAnUnparsedExternalQuery() throws Exception {
         List<CreateViewChange> changes = generate(List.of(view("a_view", "SELECT id FROM src.z_view"),
                 view("z_view", "SELECT POSITION('x' IN name) AS id FROM other.records")), Map.of());
 
-        assertEquals(List.of("z_view", "a_view"), names(changes));
-        assertTrue(rejected(changes).isEmpty());
+        assertEquals(Set.of("a_view", "z_view"), rejected(changes).keySet());
+        assertEquals("Cannot create Athena view a_view" + DEPENDS, rejected(changes).get("a_view"));
     }
 
     @Test

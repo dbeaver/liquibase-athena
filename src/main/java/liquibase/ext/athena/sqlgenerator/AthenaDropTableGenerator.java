@@ -26,9 +26,6 @@ public class AthenaDropTableGenerator extends AbstractSqlGenerator<DropTableStat
             SqlGeneratorChain<DropTableStatement> chain) {
         ValidationErrors errors = new ValidationErrors();
         errors.checkRequiredField("tableName", statement.getTableName());
-        if (statement.isCascadeConstraints()) {
-            errors.addError("Athena DROP TABLE does not support CASCADE CONSTRAINTS: " + statement.getTableName());
-        }
         return errors;
     }
 

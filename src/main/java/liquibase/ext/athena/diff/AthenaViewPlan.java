@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -39,7 +38,6 @@ import liquibase.structure.core.View;
  * the views it reads, and a view built on a view which cannot be created cannot be created either.
  */
 final class AthenaViewPlan {
-    private static final Pattern QUERY_START = Pattern.compile("\\s*(\\(|(select|with|values)\\b)");
     private static final Comparator<View> BY_NAME = Comparator.comparing(view -> view.getName().toLowerCase(Locale.ROOT));
     // A comparison marks the objects it has handled in its control, so the plan lives as long as that control.
     private static final Map<DiffOutputControl, AthenaViewPlan> PLANS = Collections.synchronizedMap(new WeakHashMap<>());
@@ -117,9 +115,8 @@ final class AthenaViewPlan {
             try {
                 creation.setSelectQuery(AthenaViewReferences.remap(creation.getSelectQuery(), schemas, referenceCatalog, references));
             } catch (DatabaseException | IllegalArgumentException e) {
-                if (!canKeepUnmapped(creation.getSelectQuery(), schemas)) {
-                    creation.rejectReferences("Cannot map Athena view " + view.getName() + " to the target schema: " + e.getMessage());
-                }
+                // An unparsed query may still depend on other views through unqualified names.
+                creation.rejectReferences("Cannot map Athena view " + view.getName() + " to the target schema: " + e.getMessage());
             }
             Set<Relation> dependencies = new HashSet<>(references.values());
             // Athena views are not recursive, so the unqualified own name is another relation.
@@ -225,13 +222,5 @@ final class AthenaViewPlan {
                         relation.getColumns().stream().map(column -> column.getName().toLowerCase(Locale.ROOT))
                                 .collect(Collectors.toSet())));
         return columns;
-    }
-
-    // Placeholders such as [CANNOT READ VIEW DEFINITION] are not queries,
-    // and a query without the name of a compared schema cannot read that schema.
-    private static boolean canKeepUnmapped(String query, Map<Relation, Relation> schemas) {
-        String text = query.toLowerCase(Locale.ROOT);
-        return QUERY_START.matcher(text).lookingAt()
-                && schemas.keySet().stream().noneMatch(schema -> text.contains(schema.schema()));
     }
 }

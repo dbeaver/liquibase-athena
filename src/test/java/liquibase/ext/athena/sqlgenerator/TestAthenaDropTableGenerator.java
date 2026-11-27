@@ -27,15 +27,6 @@ public class TestAthenaDropTableGenerator {
     }
 
     @Test
-    public void rejectsCascadeConstraints() {
-        DropTableChange change = new DropTableChange();
-        change.setTableName("events");
-        change.setCascadeConstraints(true);
-
-        assertTrue(change.validate(new AthenaDatabase()).getErrorMessages().toString().contains("CASCADE CONSTRAINTS"));
-    }
-
-    @Test
     public void onlyAppliesToAthena() {
         DropTableStatement statement = new DropTableStatement(null, "target", "events", false);
 

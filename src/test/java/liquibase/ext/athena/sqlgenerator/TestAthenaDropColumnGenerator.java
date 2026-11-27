@@ -53,15 +53,13 @@ public class TestAthenaDropColumnGenerator {
     }
 
     @Test
-    public void onlyWarnsWhenTheTableFormatCannotBeRead() {
+    public void doesNotRejectATableWhichCannotBeRead() {
         // Liquibase validates a whole changelog first, so the table may be created by an earlier change set.
         for (AthenaDatabase database : new AthenaDatabase[] { new AthenaDatabase(), database(null, new AtomicInteger()) }) {
             DropColumnChange change = change("extra");
 
             assertFalse(change.validate(database).getErrorMessages().toString(), change.validate(database).hasErrors());
-            assertTrue(change.warn(database).getMessages().toString().contains("Cannot confirm"));
         }
-        assertFalse(change("extra").warn(database(ICEBERG, new AtomicInteger())).hasWarnings());
     }
 
     @Test

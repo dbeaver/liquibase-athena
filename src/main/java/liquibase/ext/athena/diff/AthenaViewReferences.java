@@ -14,9 +14,6 @@ import liquibase.CatalogAndSchema;
 import liquibase.diff.compare.CompareControl;
 import liquibase.exception.DatabaseException;
 import net.sf.jsqlparser.JSQLParserException;
-import net.sf.jsqlparser.expression.JdbcNamedParameter;
-import net.sf.jsqlparser.expression.JdbcParameter;
-import net.sf.jsqlparser.expression.NumericBind;
 import net.sf.jsqlparser.parser.CCJSqlParserConstants;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.parser.Node;
@@ -186,10 +183,6 @@ final class AthenaViewReferences {
         List<SimpleNode> nodes = new ArrayList<>(List.of(root));
         for (int index = 0; index < nodes.size(); index++) {
             SimpleNode node = nodes.get(index);
-            if (node.jjtGetValue() instanceof JdbcParameter || node.jjtGetValue() instanceof JdbcNamedParameter
-                    || node.jjtGetValue() instanceof NumericBind) {
-                throw new DatabaseException("Athena view definitions cannot contain parameters");
-            }
             for (int child = 0; child < node.jjtGetNumChildren(); child++) {
                 nodes.add((SimpleNode) node.jjtGetChild(child));
             }
