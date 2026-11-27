@@ -133,6 +133,13 @@ public class TestAthenaViewReferences {
     }
 
     @Test
+    public void reportsUnavailableQueriesAsDatabaseErrors() {
+        for (String query : new String[] { null, "", " \n\t" }) {
+            assertThrows(DatabaseException.class, () -> remap(query));
+        }
+    }
+
+    @Test
     public void keepsOffsetsCommentsAndLiterals() throws DatabaseException {
         for (String prefix : List.of("SELECT 'é😀' AS text\tFROM\t",
                 "-- src.departments\r\nSELECT 'é😀 src.departments' AS text\r\nFROM ")) {

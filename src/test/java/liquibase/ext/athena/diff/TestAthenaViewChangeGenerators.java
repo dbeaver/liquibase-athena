@@ -92,6 +92,30 @@ public class TestAthenaViewChangeGenerators {
     }
 
     @Test
+    public void rejectsUnavailableDefinitionsWithoutAbortingIndependentViews() throws Exception {
+        for (String definition : new String[] { null, "", " \n\t" }) {
+            for (boolean changed : new boolean[] { false, true }) {
+                View unavailable = view("unavailable_view", definition);
+                List<View> missing = new ArrayList<>(List.of(view("dependent_view", "SELECT * FROM unavailable_view"),
+                        view("independent_view", "SELECT 1 AS id")));
+                if (!changed) {
+                    missing.add(unavailable);
+                }
+                List<CreateViewChange> changes = generate(missing, changed ? Map.of(unavailable, "SELECT 1 AS id") : Map.of());
+
+                assertEquals(Set.of("unavailable_view", "dependent_view"), rejected(changes).keySet());
+                assertEquals("independent_view", changes.get(0).getViewName());
+                CreateViewChange rejected = changes.stream().filter(change -> "unavailable_view".equals(change.getViewName()))
+                        .findFirst().orElseThrow();
+                assertTrue(rejected.validate(database()).hasErrors());
+                if (definition == null) {
+                    assertEquals("COULD NOT DETERMINE VIEW QUERY", rejected.getSelectQuery());
+                }
+            }
+        }
+    }
+
+    @Test
     public void keepsTheDefinitionWhenSchemasAreNotMapped() {
         String sql = "SELECT src.departments.id FROM src.departments";
         CompareControl.SchemaComparison[] sameSchema = { new CompareControl.SchemaComparison(
