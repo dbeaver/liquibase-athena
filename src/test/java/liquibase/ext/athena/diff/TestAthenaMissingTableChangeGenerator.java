@@ -144,6 +144,11 @@ public class TestAthenaMissingTableChangeGenerator {
         Change[] h2Changes = ChangeGeneratorFactory.getInstance().fixMissing(table(),
                 new DiffOutputControl(true, true, false, null), new H2Database(), new H2Database());
         assertEquals(CreateTableChange.class, h2Changes[0].getClass());
+        Change[] toAthena = ChangeGeneratorFactory.getInstance().fixMissing(table(),
+                new DiffOutputControl(true, true, false, null), new H2Database(), new AthenaDatabase());
+        assertEquals(CreateTableChange.class, toAthena[0].getClass());
+        assertEquals("events", ((CreateTableChange) toAthena[0]).getTableName());
+        assertEquals("id", ((CreateTableChange) toAthena[0]).getColumns().get(0).getName());
     }
 
     @Test

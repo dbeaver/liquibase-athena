@@ -25,6 +25,7 @@ public class AthenaMissingTableChangeGenerator extends MissingTableChangeGenerat
     @Override
     public Change[] fixMissing(DatabaseObject missingObject, DiffOutputControl control, Database referenceDatabase,
             Database comparisonDatabase, ChangeGeneratorChain chain) {
+        // The factory selects missing-object generators by the reference database, so it is Athena here.
         if (!(comparisonDatabase instanceof AthenaDatabase)) {
             return chain.fixMissing(missingObject, control, referenceDatabase, comparisonDatabase);
         }
