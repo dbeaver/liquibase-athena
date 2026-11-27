@@ -136,6 +136,19 @@ public class TestAthenaViewChangeGenerators {
     }
 
     @Test
+    public void recursiveCtesDoNotDependOnEquallyNamedViews() throws Exception {
+        String query = "WITH RECURSIVE z_view(id) AS (SELECT 1 UNION ALL SELECT id + 1 FROM z_view WHERE id < 3) "
+                + "SELECT * FROM z_view";
+        for (String other : List.of("SELECT id FROM src.a_view", "SELECT src.departments.id FROM src.departments")) {
+            List<CreateViewChange> changes = generate(List.of(view("a_view", query), view("z_view", other)), Map.of());
+
+            assertEquals(List.of("a_view", "z_view"), names(changes));
+            assertFalse(rejected(changes).containsKey("a_view"));
+            assertEquals(query, changes.get(0).getSelectQuery());
+        }
+    }
+
+    @Test
     public void rejectsViewsWhichDependOnEachOtherOrOnThemselves() throws Exception {
         List<CreateViewChange> changes = generate(List.of(view("a_view", "SELECT id FROM src.b_view"),
                 view("b_view", "SELECT id FROM src.a_view"), view("c_view", "SELECT * FROM tgt.c_view"),

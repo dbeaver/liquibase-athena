@@ -180,12 +180,30 @@ public class TestAthenaViewReferences {
         for (String sql : List.of("SELECT * FROM base_view",
                 "WITH base_view AS (SELECT * FROM base_view) SELECT * FROM base_view",
                 "WITH nested AS (SELECT * FROM base_view), base_view AS (SELECT 1) SELECT * FROM nested",
+                "WITH RECURSIVE seed AS (SELECT 1) SELECT * FROM "
+                        + "(WITH base_view AS (SELECT * FROM base_view) SELECT * FROM base_view) nested",
                 "SELECT * FROM (WITH base_view AS (SELECT 1) SELECT * FROM base_view) nested JOIN base_view ON true")) {
             assertEquals(sql, Set.of(view), references(sql));
         }
         for (String sql : List.of("WITH base_view AS (SELECT 1) SELECT * FROM base_view",
                 "WITH RECURSIVE \"BASE_VIEW\" AS (SELECT 1) SELECT * FROM base_view UNION ALL SELECT * FROM base_view",
                 "WITH base_view AS (SELECT 1), nested AS (SELECT * FROM base_view) SELECT * FROM nested")) {
+            assertEquals(sql, Set.of(), references(sql));
+        }
+    }
+
+    @Test
+    public void recursiveCommonTableExpressionsBindTheirOwnName() throws DatabaseException {
+        for (String sql : List.of(
+                "WITH RECURSIVE base_view(id) AS (SELECT 1 UNION ALL SELECT id + 1 FROM base_view WHERE id < 3) "
+                        + "SELECT * FROM base_view",
+                "WITH RECURSIVE \"BASE_VIEW\"(id) AS (SELECT 1 UNION ALL SELECT id + 1 FROM base_view WHERE id < 3) "
+                        + "SELECT * FROM base_view",
+                "WITH RECURSIVE seed(id) AS (SELECT 1), base_view(id) AS "
+                        + "(SELECT id FROM seed UNION ALL SELECT id + 1 FROM base_view WHERE id < 3) SELECT * FROM base_view",
+                "WITH outer_cte AS (WITH RECURSIVE base_view(id) AS "
+                        + "(SELECT 1 UNION ALL SELECT id + 1 FROM base_view WHERE id < 3) SELECT * FROM base_view) "
+                        + "SELECT * FROM outer_cte")) {
             assertEquals(sql, Set.of(), references(sql));
         }
     }

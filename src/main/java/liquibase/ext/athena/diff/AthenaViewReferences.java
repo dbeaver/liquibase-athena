@@ -137,20 +137,25 @@ final class AthenaViewReferences {
                 .toList();
     }
 
-    // A common table expression hides relations with the same name only from the nodes which follow it.
+    // A CTE is visible after its definition; a recursive WITH also binds it inside its own definition.
     private static boolean isCommonTableExpression(SimpleNode table, String name) {
         for (Node node = table; node.jjtGetParent() != null; node = node.jjtGetParent()) {
             Node parent = node.jjtGetParent();
-            for (int index = 0; parent.jjtGetChild(index) != node; index++) {
+            boolean recursive = false;
+            for (int index = 0; index < parent.jjtGetNumChildren(); index++) {
                 SimpleNode sibling = (SimpleNode) parent.jjtGetChild(index);
                 if ("WithItem".equals(sibling.toString())) {
                     Token alias = sibling.jjtGetFirstToken();
                     if (alias.kind == CCJSqlParserConstants.K_RECURSIVE) {
+                        recursive = true;
                         alias = alias.next;
                     }
-                    if (name.equals(identifier(alias.image))) {
+                    if ((sibling != node || recursive) && name.equals(identifier(alias.image))) {
                         return true;
                     }
+                }
+                if (sibling == node) {
+                    break;
                 }
             }
         }
