@@ -58,7 +58,7 @@ public class AthenaAddColumnGenerator extends AbstractSqlGenerator<AddColumnStat
             definitions.add(AthenaDatabase.quoteDdlIdentifier(column.getColumnName()) + " "
                     + AthenaCreateTableGenerator.toHiveType(column.getColumnType())
                     + (remarks == null || remarks.isEmpty() ? ""
-                            : " COMMENT '" + remarks.replace("\\", "\\\\").replace("'", "\\'") + "'"));
+                            : AthenaCreateTableGenerator.comment(remarks)));
         }
         String tableName = ((AthenaDatabase) database).escapeTableNameForDdl(
                 columns.get(0).getSchemaName(), columns.get(0).getTableName());

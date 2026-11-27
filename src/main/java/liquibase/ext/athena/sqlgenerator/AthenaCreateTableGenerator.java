@@ -73,10 +73,10 @@ public class AthenaCreateTableGenerator extends CreateTableGenerator {
         for (String column : statement.getColumns()) {
             String type = toHiveType(statement.getColumnTypes().get(column).toDatabaseDataType(database).toString());
             columns.add(AthenaDatabase.quoteDdlIdentifier(column) + " " + type
-                    + comment(statement.getColumnRemarks(column), database));
+                    + comment(statement.getColumnRemarks(column)));
         }
         String sql = "CREATE EXTERNAL TABLE " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
-                + tableName + " (" + columns + ")" + comment(statement.getRemarks(), database);
+                + tableName + " (" + columns + ")" + comment(statement.getRemarks());
         return new Sql[] { new UnparsedSql(sql, getAffectedTable(statement)) };
     }
 
@@ -93,7 +93,8 @@ public class AthenaCreateTableGenerator extends CreateTableGenerator {
         };
     }
 
-    private static String comment(String remarks, Database database) {
-        return remarks == null ? "" : " COMMENT '" + database.escapeStringForDatabase(remarks) + "'";
+    // Hive DDL uses backslash escapes, unlike Trino SELECT string literals.
+    static String comment(String remarks) {
+        return remarks == null ? "" : " COMMENT '" + remarks.replace("\\", "\\\\").replace("'", "\\'") + "'";
     }
 }
