@@ -90,7 +90,7 @@ final class AthenaViewPlan {
         for (View view : changed.keySet().stream().sorted(BY_NAME).toList()) {
             ObjectDifferences differences = changed.get(view);
             if ((filter == null || filter.includeChanged(view, differences, referenceDatabase, comparisonDatabase))
-                    && !differsOnlyBySchemaNames(differences, schemas, referenceCatalog, referenceSnapshot, comparisonSnapshot)) {
+                    && !differsOnlyBySchemaNames(view, differences, schemas, referenceCatalog, referenceSnapshot, comparisonSnapshot)) {
                 changedViews.add(view);
                 generated.put(view, changedGenerator.fixChanged(view, differences, control, referenceDatabase,
                         comparisonDatabase, null));
@@ -183,7 +183,7 @@ final class AthenaViewPlan {
     }
 
     // A view which differs from the reference one only by the names of the compared schemas is not changed.
-    private static boolean differsOnlyBySchemaNames(ObjectDifferences differences, Map<Relation, Relation> schemas,
+    private static boolean differsOnlyBySchemaNames(View view, ObjectDifferences differences, Map<Relation, Relation> schemas,
             String referenceCatalog, DatabaseSnapshot referenceSnapshot, DatabaseSnapshot comparisonSnapshot) {
         Difference definition = differences.getDifference("definition");
         if (referenceSnapshot == null || comparisonSnapshot == null || definition == null
@@ -197,11 +197,23 @@ final class AthenaViewPlan {
             String mapped = AthenaViewReferences.remap(reference, schemas, referenceCatalog, references);
             Map<Relation, Set<String>> referenceColumns = columns(referenceSnapshot);
             Map<Relation, Set<String>> comparisonColumns = columns(comparisonSnapshot);
+            Relation sourceSchema = Relation.of(view.getSchema() == null ? null : view.getSchema().getCatalogName(),
+                    view.getSchema() == null ? null : view.getSchema().getName(), null, referenceCatalog);
+            Relation targetSchema = schemas.getOrDefault(sourceSchema, sourceSchema);
             // Identical SQL can bind differently when the available columns differ.
             return references.entrySet().stream().allMatch(read -> {
-                Set<String> columns = referenceColumns.get(read.getKey());
-                return read.getKey().equals(read.getValue()) || columns != null && !columns.isEmpty()
-                        && columns.equals(comparisonColumns.get(read.getValue()));
+                Relation source = read.getKey();
+                Relation target = read.getValue();
+                if (source.schema().isEmpty()) {
+                    if (sourceSchema.schema().isEmpty() || targetSchema.schema().isEmpty()) {
+                        return false;
+                    }
+                    source = new Relation(sourceSchema.catalog(), sourceSchema.schema(), source.name());
+                    target = new Relation(targetSchema.catalog(), targetSchema.schema(), target.name());
+                }
+                Set<String> columns = referenceColumns.get(source);
+                return source.equals(target) || columns != null && !columns.isEmpty()
+                        && columns.equals(comparisonColumns.get(target));
             })
                     && !mapped.equals(reference)
                     && AthenaViewReferences.canonical(mapped).equals(AthenaViewReferences.canonical(compared));

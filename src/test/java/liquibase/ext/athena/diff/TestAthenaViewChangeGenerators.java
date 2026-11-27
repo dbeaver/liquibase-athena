@@ -287,6 +287,26 @@ public class TestAthenaViewChangeGenerators {
     }
 
     @Test
+    public void resolvesUnqualifiedRelationsBeforeComparingViewBindings() throws Exception {
+        Map<String, List<String>> known = Map.of("departments", List.of("id"), "staff", List.of("id"));
+        Map<String, List<String>> filtered = Map.of("departments", List.of("id"));
+        for (Map<String, List<String>> source : List.of(known, filtered)) {
+            for (Map<String, List<String>> target : List.of(known, filtered,
+                    Map.of("departments", List.of("id"), "staff", List.of("id", "extra")),
+                    Map.of("departments", List.of("id"), "staff", List.<String>of()))) {
+                View view = view("departments_view", "SELECT * FROM src.departments d JOIN staff s ON true");
+                DiffResult result = new DiffResult(snapshot("src", source), snapshot("tgt", target),
+                        new CompareControl(COMPARISONS, "tables,views"));
+                result.addChangedObject(view, differences(view, "SELECT * FROM tgt.departments d JOIN staff s ON true"));
+
+                boolean equivalent = source.containsKey("staff") && source.get("staff").equals(target.get("staff"));
+                assertEquals(source + " / " + target, equivalent ? List.of() : List.of("departments_view"),
+                        names(generate(result, null)));
+            }
+        }
+    }
+
+    @Test
     public void replacesAViewWhichAlsoDiffersInAnotherProperty() throws Exception {
         View view = view("departments_view", "SELECT id FROM src.departments");
         ObjectDifferences differences = differences(view, "SELECT id FROM tgt.departments");
@@ -395,15 +415,21 @@ public class TestAthenaViewChangeGenerators {
     }
 
     private static DatabaseSnapshot snapshot(String schema, String... columns) throws Exception {
-        Table table = new Table("awsdatacatalog", schema, "departments");
-        for (String column : columns) {
-            table.addColumn(new Column().setName(column));
+        return snapshot(schema, Map.of("departments", List.of(columns)));
+    }
+
+    private static DatabaseSnapshot snapshot(String schema, Map<String, List<String>> relations) throws Exception {
+        List<Table> tables = new ArrayList<>();
+        for (Map.Entry<String, List<String>> relation : relations.entrySet()) {
+            Table table = new Table("awsdatacatalog", schema, relation.getKey());
+            relation.getValue().forEach(column -> table.addColumn(new Column().setName(column)));
+            tables.add(table);
         }
         return new EmptyDatabaseSnapshot(database()) {
             @Override
             @SuppressWarnings("unchecked")
             public <T extends DatabaseObject> Set<T> get(Class<T> type) {
-                return type == Table.class ? (Set<T>) Set.of(table) : Set.of();
+                return type == Table.class ? (Set<T>) Set.copyOf(tables) : Set.of();
             }
         };
     }
