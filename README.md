@@ -151,7 +151,10 @@ Validation of a `createView` change reports a view which cannot be created:
   of an unaliased relation (`SELECT src.orders.id FROM src.orders`); give such relations explicit aliases;
 * it reads such a view, or views read each other in a cycle.
 
-The definition of such a view is left unchanged.
+The definition of such a view is left unchanged. Rejected views are saved as `createAthenaView` changes with
+their validation error, so loading an XML, JSON or YAML changelog does not make them executable.
+Supported views keep the standard `createView` format. A schema-only difference is ignored only when the
+referenced relations have known, matching columns in both snapshots.
 
 ## Issue Tracking
 

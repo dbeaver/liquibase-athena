@@ -49,7 +49,7 @@ public class TestAthenaViewChangeGenerators {
         assertNull(change.getReferenceError());
         assertFalse(change.validate(database()).hasErrors());
         assertEquals("createView", change.getSerializedObjectName());
-        assertFalse(change.getSerializableFields().contains("referenceError"));
+        assertTrue(change.getSerializableFields().contains("referenceError"));
     }
 
     @Test
@@ -236,6 +236,26 @@ public class TestAthenaViewChangeGenerators {
         result.addChangedObject(view, differences);
 
         assertEquals(List.of("departments_view"), names(generate(result, null)));
+    }
+
+    @Test
+    public void keepsChangedViewsWhenColumnMetadataIsUnavailable() throws Exception {
+        List<DatabaseSnapshot> sources = List.of(new EmptyDatabaseSnapshot(database()), snapshot("src"), snapshot("src", "id"));
+        List<DatabaseSnapshot> targets = List.of(new EmptyDatabaseSnapshot(database()), snapshot("tgt"), snapshot("tgt", "id"));
+        for (int source = 0; source < sources.size(); source++) {
+            for (int target = 0; target < targets.size(); target++) {
+                if (source == 2 && target == 2) {
+                    continue;
+                }
+                View view = view("departments_view", "SELECT * FROM src.departments");
+                DiffResult result = new DiffResult(sources.get(source), targets.get(target),
+                        new CompareControl(COMPARISONS, "views"));
+                result.addChangedObject(view, differences(view, "SELECT * FROM tgt.departments"));
+
+                assertEquals("metadata " + source + "/" + target,
+                        List.of("departments_view"), names(generate(result, null)));
+            }
+        }
     }
 
     @Test

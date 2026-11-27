@@ -202,8 +202,11 @@ final class AthenaViewPlan {
             Map<Relation, Set<String>> referenceColumns = columns(referenceSnapshot);
             Map<Relation, Set<String>> comparisonColumns = columns(comparisonSnapshot);
             // Identical SQL can bind differently when the available columns differ.
-            return references.entrySet().stream().allMatch(read -> read.getKey().equals(read.getValue())
-                    || Objects.equals(referenceColumns.get(read.getKey()), comparisonColumns.get(read.getValue())))
+            return references.entrySet().stream().allMatch(read -> {
+                Set<String> columns = referenceColumns.get(read.getKey());
+                return read.getKey().equals(read.getValue()) || columns != null && !columns.isEmpty()
+                        && columns.equals(comparisonColumns.get(read.getValue()));
+            })
                     && !mapped.equals(reference)
                     && AthenaViewReferences.canonical(mapped).equals(AthenaViewReferences.canonical(compared));
         } catch (DatabaseException | IllegalArgumentException e) {
