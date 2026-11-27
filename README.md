@@ -133,6 +133,7 @@ Validation reports the changes Athena cannot apply instead of generating generic
 `dropColumn` on a table which is known not to be Iceberg (the table format is read with `SHOW CREATE TABLE`;
 a table which cannot be read yet is not rejected), added columns with constraints or default values,
 and `modifyDataType`.
+Adding a `DATE` column is also rejected for a known external/Hive table; Iceberg tables can add it.
 
 ## Generated views
 

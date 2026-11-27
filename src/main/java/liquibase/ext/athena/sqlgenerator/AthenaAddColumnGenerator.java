@@ -38,6 +38,12 @@ public class AthenaAddColumnGenerator extends AbstractSqlGenerator<AddColumnStat
                 errors.addError("Athena ADD COLUMNS does not support the requested column constraints or values: "
                         + column.getTableName() + "." + column.getColumnName());
             }
+            if (!errors.hasErrors() && "DATE".equalsIgnoreCase(AthenaCreateTableGenerator.toHiveType(column.getColumnType()))
+                    && Boolean.FALSE.equals(AthenaTableFormat.isIceberg(
+                            (AthenaDatabase) database, column.getSchemaName(), column.getTableName()))) {
+                errors.addError("Athena ADD COLUMNS does not support DATE for external/Hive tables: "
+                        + column.getTableName() + "." + column.getColumnName());
+            }
         }
         return errors;
     }

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -118,10 +117,7 @@ final class AthenaViewPlan {
                 // An unparsed query may still depend on other views through unqualified names.
                 creation.rejectReferences("Cannot map Athena view " + view.getName() + " to the target schema: " + e.getMessage());
             }
-            Set<Relation> dependencies = new HashSet<>(references.values());
-            // Athena views are not recursive, so the unqualified own name is another relation.
-            dependencies.remove(new Relation("", "", name.name()));
-            reads.put(view, dependencies.stream().map(dependency -> dependency.schema().isEmpty()
+            reads.put(view, references.values().stream().map(dependency -> dependency.schema().isEmpty()
                     ? new Relation(name.catalog(), name.schema(), dependency.name()) : dependency).collect(Collectors.toSet()));
         }
         Map<View, Set<View>> prerequisites = new IdentityHashMap<>();

@@ -1,16 +1,8 @@
 package liquibase.ext.athena.sqlgenerator;
 
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.WeakHashMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 
-import liquibase.CatalogAndSchema;
 import liquibase.database.Database;
-import liquibase.database.DatabaseConnection;
-import liquibase.exception.DatabaseException;
 import liquibase.exception.ValidationErrors;
 import liquibase.ext.athena.database.AthenaDatabase;
 import liquibase.sql.Sql;
@@ -24,13 +16,6 @@ import liquibase.statement.core.DropColumnStatement;
  * a table which cannot be read, such as one created earlier in the same changelog, is not rejected.
  */
 public class AthenaDropColumnGenerator extends AbstractSqlGenerator<DropColumnStatement> {
-    private static final Pattern ICEBERG_TABLE = Pattern.compile(
-            "'table_type'\\s*=\\s*'iceberg'", Pattern.CASE_INSENSITIVE);
-
-    // Several columns of one table are dropped by separate statements; a known format is read once per connection.
-    private final Map<DatabaseConnection, Map<String, Boolean>> icebergTables =
-            Collections.synchronizedMap(new WeakHashMap<>());
-
     @Override
     public int getPriority() {
         return PRIORITY_DATABASE;
@@ -50,7 +35,8 @@ public class AthenaDropColumnGenerator extends AbstractSqlGenerator<DropColumnSt
             errors.checkRequiredField("columnName", column.getColumnName());
         }
         DropColumnStatement first = columns(statement).get(0);
-        if (!errors.hasErrors() && Boolean.FALSE.equals(isIceberg((AthenaDatabase) database, first))) {
+        if (!errors.hasErrors() && Boolean.FALSE.equals(AthenaTableFormat.isIceberg(
+                (AthenaDatabase) database, first.getSchemaName(), first.getTableName()))) {
             errors.addError("Athena does not support DROP COLUMN for external/Hive tables: "
                     + ((AthenaDatabase) database).escapeTableNameForDdl(first.getSchemaName(), first.getTableName()));
         }
@@ -71,23 +57,4 @@ public class AthenaDropColumnGenerator extends AbstractSqlGenerator<DropColumnSt
         return statement.isMultiple() ? statement.getColumns() : List.of(statement);
     }
 
-    /** Returns null when the format is unknown: there is no connection or the table cannot be read yet. */
-    private Boolean isIceberg(AthenaDatabase database, DropColumnStatement column) {
-        DatabaseConnection connection = database.getConnection();
-        if (connection == null) {
-            return null;
-        }
-        String tableName = database.escapeTableNameForDdl(column.getSchemaName(), column.getTableName());
-        Map<String, Boolean> known = icebergTables.computeIfAbsent(connection, key -> new ConcurrentHashMap<>());
-        return known.computeIfAbsent(tableName, key -> {
-            try {
-                // SHOW TBLPROPERTIES omits table_type, so the complete definition is read.
-                return ICEBERG_TABLE.matcher(database.getTableDefinition(
-                        new CatalogAndSchema(null, column.getSchemaName()), column.getTableName())).find();
-            } catch (DatabaseException e) {
-                // A failed read is not remembered: the table may appear later or the failure may be temporary.
-                return null;
-            }
-        });
-    }
 }

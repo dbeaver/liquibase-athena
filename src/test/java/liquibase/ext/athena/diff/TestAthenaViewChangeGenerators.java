@@ -126,7 +126,9 @@ public class TestAthenaViewChangeGenerators {
             assertEquals(sql, List.of("z_view", "a_view"), names(generate(
                     List.of(view("a_view", sql), view("z_view", "SELECT id FROM src.departments")), Map.of())));
         }
-        for (String sql : List.of("WITH z_view AS (SELECT 1) SELECT * FROM z_view", "SELECT * FROM a_view",
+        for (String sql : List.of("WITH z_view AS (SELECT 1) SELECT * FROM z_view",
+                "WITH a_view AS (SELECT 1) SELECT * FROM a_view",
+                "WITH RECURSIVE a_view(id) AS (SELECT 1 UNION ALL SELECT id + 1 FROM a_view WHERE id < 3) SELECT * FROM a_view",
                 "WITH z_view AS (SELECT 1), nested AS (SELECT * FROM z_view) SELECT * FROM nested")) {
             List<CreateViewChange> changes = generate(
                     List.of(view("a_view", sql), view("z_view", "SELECT id FROM src.departments")), Map.of());
@@ -158,6 +160,19 @@ public class TestAthenaViewChangeGenerators {
         assertEquals(Map.of("a_view", "Cannot create Athena view a_view" + DEPENDS,
                 "b_view", "Cannot create Athena view b_view" + DEPENDS,
                 "c_view", "Cannot create Athena view c_view" + DEPENDS), rejected(changes));
+    }
+
+    @Test
+    public void rejectsUnqualifiedSelfReferencesAndTheirDependents() throws Exception {
+        for (String query : List.of("SELECT * FROM a_view", "SELECT * FROM \"A_VIEW\"",
+                "WITH unrelated AS (SELECT 1) SELECT * FROM a_view")) {
+            List<CreateViewChange> changes = generate(List.of(view("a_view", query),
+                    view("top_view", "SELECT * FROM a_view"), view("independent_view", "SELECT 1 AS id")), Map.of());
+
+            assertEquals(Set.of("a_view", "top_view"), rejected(changes).keySet());
+            assertEquals("Cannot create Athena view a_view" + DEPENDS, rejected(changes).get("a_view"));
+            assertEquals("independent_view", changes.get(0).getViewName());
+        }
     }
 
     @Test

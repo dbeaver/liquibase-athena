@@ -1,10 +1,16 @@
 package liquibase.ext.athena.sqlgenerator;
 
+import java.util.List;
+
+import liquibase.CatalogAndSchema;
 import liquibase.change.AddColumnConfig;
 import liquibase.change.ConstraintsConfig;
 import liquibase.change.core.AddColumnChange;
 import liquibase.database.Database;
+import liquibase.database.DatabaseConnection;
 import liquibase.database.core.H2Database;
+import liquibase.database.jvm.JdbcConnection;
+import liquibase.exception.DatabaseException;
 import liquibase.ext.athena.database.AthenaDatabase;
 import liquibase.sql.Sql;
 import liquibase.sqlgenerator.SqlGeneratorFactory;
@@ -74,6 +80,33 @@ public class TestAthenaAddColumnGenerator {
     }
 
     @Test
+    public void rejectsDateAdditionsForHiveTables() {
+        AthenaDatabase hive = database("CREATE EXTERNAL TABLE qa_employees (id int)");
+        for (String type : List.of("DATE", "date", "DATE(10)", "date ( 10 )")) {
+            AddColumnChange change = change("extra", type);
+            assertTrue(type, change.validate(hive).getErrorMessages().toString().contains("DATE"));
+        }
+        AddColumnChange multiple = change("first", "INT");
+        AddColumnConfig second = new AddColumnConfig();
+        second.setName("second");
+        second.setType("DATE");
+        multiple.addColumn(second);
+        assertTrue(multiple.validate(hive).hasErrors());
+        assertFalse(change("extra", "TIMESTAMP(29)").validate(hive).hasErrors());
+    }
+
+    @Test
+    public void acceptsDateForIcebergOrAnUnknownTableFormat() {
+        for (AthenaDatabase database : List.of(
+                database("CREATE TABLE qa_employees (id int) TBLPROPERTIES ('table_type'='ICEBERG')"),
+                new AthenaDatabase(), database(null))) {
+            AddColumnChange change = change("extra", "DATE(10)");
+            assertFalse(change.validate(database).getErrorMessages().toString(), change.validate(database).hasErrors());
+            assertTrue(sql(change, database).endsWith("ADD COLUMNS (`extra` DATE)"));
+        }
+    }
+
+    @Test
     public void onlyAppliesToAthena() {
         AddColumnStatement statement = new AddColumnStatement(null, "target", "events", "extra", "INT", null);
 
@@ -92,6 +125,24 @@ public class TestAthenaAddColumnGenerator {
         change.setTableName("qa_employees");
         change.addColumn(column);
         return change;
+    }
+
+    private static AthenaDatabase database(String definition) {
+        DatabaseConnection connection = new JdbcConnection();
+        return new AthenaDatabase() {
+            @Override
+            public DatabaseConnection getConnection() {
+                return connection;
+            }
+
+            @Override
+            public String getTableDefinition(CatalogAndSchema schema, String tableName) throws DatabaseException {
+                if (definition == null) {
+                    throw new DatabaseException("Table is not available yet");
+                }
+                return definition;
+            }
+        };
     }
 
     private static String sql(AddColumnChange change, Database database) {
