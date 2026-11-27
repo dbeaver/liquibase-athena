@@ -29,6 +29,7 @@ import liquibase.exception.DatabaseException;
 import liquibase.ext.athena.change.CreateAthenaViewChange;
 import liquibase.ext.athena.diff.AthenaViewReferences.Relation;
 import liquibase.snapshot.DatabaseSnapshot;
+import liquibase.structure.core.Column;
 import liquibase.structure.core.Table;
 import liquibase.structure.core.View;
 
@@ -195,8 +196,8 @@ final class AthenaViewPlan {
         try {
             Map<Relation, Relation> references = new HashMap<>();
             String mapped = AthenaViewReferences.remap(reference, schemas, referenceCatalog, references);
-            Map<Relation, Set<String>> referenceColumns = columns(referenceSnapshot);
-            Map<Relation, Set<String>> comparisonColumns = columns(comparisonSnapshot);
+            Map<Relation, List<ColumnSignature>> referenceColumns = columns(referenceSnapshot);
+            Map<Relation, List<ColumnSignature>> comparisonColumns = columns(comparisonSnapshot);
             Relation sourceSchema = Relation.of(view.getSchema() == null ? null : view.getSchema().getCatalogName(),
                     view.getSchema() == null ? null : view.getSchema().getName(), null, referenceCatalog);
             Relation targetSchema = schemas.getOrDefault(sourceSchema, sourceSchema);
@@ -211,8 +212,10 @@ final class AthenaViewPlan {
                     source = new Relation(sourceSchema.catalog(), sourceSchema.schema(), source.name());
                     target = new Relation(targetSchema.catalog(), targetSchema.schema(), target.name());
                 }
-                Set<String> columns = referenceColumns.get(source);
+                List<ColumnSignature> columns = referenceColumns.get(source);
                 return source.equals(target) || columns != null && !columns.isEmpty()
+                        && columns.stream().allMatch(column -> column.type() != null && !column.type().isBlank()
+                                && column.order() != null)
                         && columns.equals(comparisonColumns.get(target));
             })
                     && !mapped.equals(reference)
@@ -223,15 +226,22 @@ final class AthenaViewPlan {
         }
     }
 
-    private static Map<Relation, Set<String>> columns(DatabaseSnapshot snapshot) {
-        Map<Relation, Set<String>> columns = new HashMap<>();
+    private record ColumnSignature(String name, String type, Integer order) {
+    }
+
+    private static Map<Relation, List<ColumnSignature>> columns(DatabaseSnapshot snapshot) {
+        Map<Relation, List<ColumnSignature>> columns = new HashMap<>();
         String catalog = snapshot.getDatabase().getDefaultCatalogName();
         Stream.concat(snapshot.get(Table.class).stream(), snapshot.get(View.class).stream())
                 .filter(relation -> relation.getSchema() != null)
                 .forEach(relation -> columns.put(
                         Relation.of(relation.getSchema().getCatalogName(), relation.getSchema().getName(), relation.getName(), catalog),
-                        relation.getColumns().stream().map(column -> column.getName().toLowerCase(Locale.ROOT))
-                                .collect(Collectors.toSet())));
+                        relation.getColumns().stream()
+                                .sorted(Comparator.comparing(Column::getOrder, Comparator.nullsLast(Comparator.naturalOrder())))
+                                .map(column -> new ColumnSignature(column.getName().toLowerCase(Locale.ROOT),
+                                        column.getType() == null || column.getType().getTypeName() == null ? null
+                                                : column.getType().toString().trim().toUpperCase(Locale.ROOT),
+                                        column.getOrder())).toList()));
         return columns;
     }
 }

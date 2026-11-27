@@ -24,6 +24,7 @@ import liquibase.snapshot.DatabaseSnapshot;
 import liquibase.snapshot.EmptyDatabaseSnapshot;
 import liquibase.structure.DatabaseObject;
 import liquibase.structure.core.Column;
+import liquibase.structure.core.DataType;
 import liquibase.structure.core.Table;
 import liquibase.structure.core.View;
 import org.junit.Test;
@@ -307,6 +308,60 @@ public class TestAthenaViewChangeGenerators {
     }
 
     @Test
+    public void keepsChangedViewsWhenColumnTypesOrOrderDiffer() throws Exception {
+        for (int variant = 0; variant < 6; variant++) {
+            DatabaseSnapshot source = snapshot("src", "id", "name");
+            DatabaseSnapshot target = snapshot("tgt", "id", "name");
+            List<Column> targetColumns = target.get(Table.class).iterator().next().getColumns();
+            switch (variant) {
+                case 0 -> targetColumns.get(0).setType(new DataType("STRING"));
+                case 1 -> {
+                    targetColumns.get(0).setOrder(2);
+                    targetColumns.get(1).setOrder(1);
+                }
+                case 2 -> targetColumns.get(0).setType(null);
+                case 3 -> targetColumns.get(0).setOrder(null);
+                case 4 -> {
+                    source.get(Table.class).iterator().next().getColumns().get(0).setType(null);
+                    targetColumns.get(0).setType(null);
+                }
+                case 5 -> {
+                    source.get(Table.class).iterator().next().getColumns().get(0).setOrder(null);
+                    targetColumns.get(0).setOrder(null);
+                }
+                default -> throw new AssertionError();
+            }
+            View view = view("departments_view", "SELECT * FROM src.departments");
+            DiffResult result = new DiffResult(source, target,
+                    new CompareControl(COMPARISONS, "tables,views"));
+            result.addChangedObject(view, differences(view, "SELECT * FROM tgt.departments"));
+
+            assertEquals("column signature " + variant, List.of("departments_view"), names(generate(result, null)));
+        }
+    }
+
+    @Test
+    public void comparesParameterizedColumnTypesAndIgnoresTypeNameCase() throws Exception {
+        for (int scale : List.of(2, 3)) {
+            DatabaseSnapshot source = snapshot("src", "id");
+            DataType sourceType = new DataType("DECIMAL");
+            sourceType.setColumnSize(12);
+            sourceType.setDecimalDigits(2);
+            source.get(Table.class).iterator().next().getColumns().get(0).setType(sourceType);
+            DatabaseSnapshot target = snapshot("tgt", "id");
+            DataType targetType = new DataType("decimal");
+            targetType.setColumnSize(12);
+            targetType.setDecimalDigits(scale);
+            target.get(Table.class).iterator().next().getColumns().get(0).setType(targetType);
+            View view = view("departments_view", "SELECT * FROM src.departments");
+            DiffResult result = new DiffResult(source, target, new CompareControl(COMPARISONS, "tables,views"));
+            result.addChangedObject(view, differences(view, "SELECT * FROM tgt.departments"));
+
+            assertEquals(scale == 2 ? List.of() : List.of("departments_view"), names(generate(result, null)));
+        }
+    }
+
+    @Test
     public void replacesAViewWhichAlsoDiffersInAnotherProperty() throws Exception {
         View view = view("departments_view", "SELECT id FROM src.departments");
         ObjectDifferences differences = differences(view, "SELECT id FROM tgt.departments");
@@ -422,7 +477,10 @@ public class TestAthenaViewChangeGenerators {
         List<Table> tables = new ArrayList<>();
         for (Map.Entry<String, List<String>> relation : relations.entrySet()) {
             Table table = new Table("awsdatacatalog", schema, relation.getKey());
-            relation.getValue().forEach(column -> table.addColumn(new Column().setName(column)));
+            for (int index = 0; index < relation.getValue().size(); index++) {
+                table.addColumn(new Column().setName(relation.getValue().get(index))
+                        .setType(new DataType("BIGINT")).setOrder(index + 1));
+            }
             tables.add(table);
         }
         return new EmptyDatabaseSnapshot(database()) {
